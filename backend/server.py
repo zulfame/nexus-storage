@@ -660,6 +660,9 @@ async def seed_admin():
 
 @app.on_event("startup")
 async def on_startup():
+    # Remove any invalid users (e.g. an admin seeded with an empty email when
+    # ADMIN_EMAIL/ADMIN_PASSWORD were injected empty on an early deploy).
+    await db.users.delete_many({"$or": [{"email": ""}, {"email": None}, {"email": {"$exists": False}}]})
     await db.users.create_index("email", unique=True)
     await db.activity_logs.create_index([("timestamp", -1)])
     await db.activity_logs.create_index("action")
