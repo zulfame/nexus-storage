@@ -96,6 +96,18 @@ config, README env-var table).
 - Verified: iteration 11 (File Browser ~95%, race bug noted) + iteration 12 (100%, upload
   progress + drag-drop + race fix). New deps: mammoth, xlsx.
 
+## Implemented (2026-06, fork: Drive-style file ops)
+- File operations (all backends S3/Samba/SFTP): rename, move-to, copy-to for files AND folders.
+  Backend move(src,dst,is_dir)+copy(src,dst,is_dir); endpoint POST /files/move {src,dst,is_dir,copy}
+  with self-move / folder-into-itself guards. FILE_ACTIONS + logMeta include move/copy.
+- Right-click context menu (shadcn ContextMenu) on rows & grid cards: Open/Preview, Download,
+  Rename, Move to…, Copy to…, Delete. Plus mobile-friendly kebab (⋮) DropdownMenu in the list.
+- Rename dialog (in-place, same parent). MoveCopyDialog: folder-picker with breadcrumb + invalid
+  target guard, calls move endpoint with copy flag.
+- Real image thumbnails in grid + list via ThumbImage (IntersectionObserver lazy load, cached,
+  8MB cap) hitting the download endpoint.
+- Verified: iteration 14 (both) 100% frontend + backend curl-verified move/copy/rename on SFTP.
+
 ## Backlog / Next
 - P1: Storage config validation (required fields per type); 404 on unknown/malformed ids.
 - P1: Optional SFTP private-key auth (currently password only).
