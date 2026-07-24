@@ -1,0 +1,55 @@
+{
+  "summary": "Frontend-only test of File Browser UI iteration: (a) 'Getting Started' card is removed from /storages, (b) view toggle list/grid + localStorage persistence, per-folder search, colored file-type icons, (c) FilePreview modal for image/pdf/text/code/docx (mammoth)/xlsx+csv (SheetJS), (d) breadcrumb collapse dropdown at depth>3 with header actions kept on one row, (e) download from list/grid/preview and folder create + navigation. Also created live SFTP storage PREVIEW_sftp (id 6a63f0aee7a3962d514a0957) via API against the local sftp server 127.0.0.1:2222 with sample files provided by main agent. All specified UI features work as expected. One race-condition bug found on initial storage switching that can display stale files from the first auto-selected storage.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "Files.jsx (storage switcher)",
+        "issue": "Race condition: on first landing on /files, the initial loadFiles() for the auto-selected storage (r.data[0], e.g. STAGING S3) is still in-flight when the user clicks another storage (e.g. PREVIEW_sftp). If the slower response arrives AFTER the faster one, setItems() from the stale request overwrites the current storage's files. Result: header shows PREVIEW_sftp but the list still shows STAGING S3 folders (backups / nexus-backups / uploads). Reproducible by clicking PREVIEW_sftp within ~1s of landing on /files. Fix: guard loadFiles() with a request id / AbortController and ignore responses where active.id no longer matches; or clear items when active changes.",
+        "selector": "[data-testid='storage-switcher'] + [data-testid='file-list']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_features": [
+    "/storages: data-testid=getting-started is NOT rendered (confirmed via DOM query).",
+    "/files: storage switcher lists all 3 storages; SFTP root shows notes.txt, data.csv, config.json, laporan.docx, rekap.xlsx, dokumen.pdf, banner.png (+ upload folder).",
+    "view-list-button / view-grid-button toggle between file-row-<name> table and file-card-<name> grid; preference persisted to localStorage 'files_view' and restored across reload.",
+    "file-search-input filters current folder by name (typing 'rekap' -> only rekap.xlsx remains).",
+    "Preview modal opens on row/card click (isPreviewable) and via preview-<name> Eye button.",
+    "PREVIEW image: banner.png renders as <img> inside file-preview-dialog.",
+    "PREVIEW pdf: dokumen.pdf renders in <iframe>.",
+    "PREVIEW text: notes.txt renders inside <pre>.",
+    "PREVIEW code: config.json renders inside <pre>.",
+    "PREVIEW docx (mammoth): laporan.docx renders inside .doc-preview and contains the heading 'Laporan Divisi IT' (verified via inner_text).",
+    "PREVIEW xlsx (SheetJS): rekap.xlsx renders as .sheet-preview table; both Sheet1 and Sheet2 tabs are visible; switching tabs works.",
+    "PREVIEW csv: data.csv renders as .sheet-preview table.",
+    "preview-close-button (X) closes the modal; preview-download-button triggers a file download.",
+    "download-<name> in both list view and grid view triggers a download.",
+    "Clicking a FOLDER navigates into it (both list and grid). Verified via demofolder/upload path.",
+    "Deep-nesting (deep_a/deep_b/deep_c/deep_d): breadcrumb-collapse '…' button appears at depth 4 and its DropdownMenu contains the hidden parents (deep_a, deep_b). Clicking a hidden folder navigates to it.",
+    "Header layout at deep breadcrumbs: breadcrumbs and Folder / Upload / UserMenu buttons remain on a SINGLE row (measured bcTop=23 vs upTop=17 within ~8px; headerHeight ~71px). No wrap.",
+    "new-folder-button + folder-name-input + create-folder-button work; upload-file-button visible for write storages."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Fix race condition in /app/frontend/src/pages/Files.jsx loadFiles(): ignore responses whose storage no longer matches active (use ref/AbortController), OR clear items and show loader immediately when active changes (setItems([]) + setLoading(true) before await).",
+    "(Optional) Clear items when path changes / when active changes to avoid brief flash of previous folder content."
+  ],
+  "critical_code_review_comments": [
+    "Files.jsx loadFiles is not cancellation-safe. If two switches fire in quick succession, the slower response wins and the UI becomes inconsistent with the highlighted storage.",
+    "Preview modal uses onClick on the backdrop to close AND onClick on file rows to open — both work, but stopPropagation on the modal is correct. No issues observed.",
+    "FilePreview: dynamic import of 'mammoth/mammoth.browser' + 'xlsx' works; first render is ~1-2s as expected. Consider prefetching on hover of previewable rows to reduce perceived latency.",
+    "Files.jsx is ~470 lines; still manageable but could be split (header/breadcrumbs, toolbar, list view, grid view, folder-dialog) for maintainability."
+  ],
+  "updated_files": [],
+  "success_rate": { "backend": "n/a (not tested per request)", "frontend": "~95% (all functional requirements met; 1 race-condition UX bug on storage switching)" },
+  "test_credentials": "admin@example.com / admin123 (from /app/memory/test_credentials.md via prior iterations)",
+  "seed_data_creation": "Created SFTP storage 'PREVIEW_sftp' (id 6a63f0aee7a3962d514a0957) pointing at 127.0.0.1:2222 with the sample files described in the task. Left in place per request for future verification. Cleaned up deep_a/deep_b/deep_c/deep_d nested folders created for breadcrumb testing.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PREVIEW_sftp storage already exists (id 6a63f0aee7a3962d514a0957). Sample files include banner.png/dokumen.pdf/notes.txt/config.json/laporan.docx/rekap.xlsx/data.csv in the SFTP home. When testing storage switch, wait ~6s after landing on /files before clicking switch-storage-<id> to avoid the stale-response race that overwrites the file list. Or fix the race in Files.jsx first.",
+  "rca of the issue": "Race condition in /files: On mount, api.get('/storages') resolves and setActive(r.data[0]) is called for the first storage (STAGING S3). useEffect([active, loadFiles]) fires loadFiles(''), which does GET /api/storages/{stagingId}/files. STAGING S3 has ~4s response time due to bucket listing. Meanwhile the user clicks switch-storage-<sftpId> so active becomes PREVIEW_sftp and loadFiles('') is issued for SFTP. SFTP responds fast (~600ms) so items are set to the sftp file list. Then STAGING S3 response arrives (~4s later) and setItems overrides items with staging's files. UI now shows PREVIEW_sftp highlighted but staging files (backups/nexus-backups/uploads) listed. Repro: log in, navigate to /files, immediately click PREVIEW_sftp in the sidebar. Mitigation: use a request-id ref inside loadFiles and drop responses whose active.id != current; alternatively use AbortController and cancel the in-flight request when active changes."
+}

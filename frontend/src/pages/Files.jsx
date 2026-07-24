@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { UserMenu } from "@/components/UserMenu";
+import { FilePreview } from "@/components/FilePreview";
+import { fileMeta, isPreviewable } from "@/lib/fileTypes";
 import { toast } from "sonner";
 import {
   Cloud,
   Server,
   Folder,
-  File as FileIcon,
   Upload,
   Download,
   Trash2,
@@ -14,7 +15,18 @@ import {
   ChevronRight,
   Loader2,
   HardDrive,
+  LayoutGrid,
+  List as ListIcon,
+  Search,
+  Eye,
+  MoreHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
 
 function fmtSize(n) {
   if (!n) return "—";
@@ -26,6 +38,12 @@ function fmtSize(n) {
     i++;
   }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+}
+
+function storageIcon(type, size = 16) {
+  if (type === "s3") return <Cloud size={size} />;
+  if (type === "sftp") return <HardDrive size={size} />;
+  return <Server size={size} />;
 }
 
 const btnPrimary =
@@ -42,9 +60,17 @@ export default function Files() {
   const [uploading, setUploading] = useState(false);
   const [newFolder, setNewFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
+  const [view, setView] = useState(() => localStorage.getItem("files_view") || "list");
+  const [query, setQuery] = useState("");
+  const [preview, setPreview] = useState(null);
   const fileInput = useRef(null);
 
   const canWrite = active?.permission === "write";
+
+  const setViewMode = (v) => {
+    setView(v);
+    localStorage.setItem("files_view", v);
+  };
 
   useEffect(() => {
     api.get("/storages").then((r) => {
@@ -73,17 +99,26 @@ export default function Files() {
   useEffect(() => {
     if (active) {
       setPath("");
+      setQuery("");
       loadFiles("");
     }
   }, [active, loadFiles]);
 
   const enter = (item) => {
     if (!item.is_dir) return;
+    setQuery("");
     setPath(item.path);
     loadFiles(item.path);
   };
 
+  const openItem = (item) => {
+    if (item.is_dir) return enter(item);
+    if (isPreviewable(item.name)) setPreview(item);
+    else download(item);
+  };
+
   const goTo = (p) => {
+    setQuery("");
     setPath(p);
     loadFiles(p);
   };
@@ -147,6 +182,10 @@ export default function Files() {
     }
   };
 
+  const filtered = query.trim()
+    ? items.filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : items;
+
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-0px)]">
       {/* storage switcher */}
@@ -163,7 +202,7 @@ export default function Files() {
                 active?.id === s.id ? "border-primary bg-blue-50 text-blue-700" : "border-transparent text-gray-600 hover:bg-gray-100"
               }`}
             >
-              {s.type === "s3" ? <Cloud size={16} /> : <Server size={16} />}
+              {storageIcon(s.type)}
               <span className="flex-1 truncate">{s.name}</span>
               <span
                 className="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded"
@@ -194,28 +233,70 @@ export default function Files() {
           </>
         ) : (
           <>
-            <header className="sticky top-0 lg:top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 text-sm flex-wrap min-w-0" data-testid="breadcrumbs">
-                <button onClick={() => goTo("")} className="font-semibold text-blue-600 hover:underline">{active.name}</button>
-                {crumbs.map((c, i) => {
-                  const p = crumbs.slice(0, i + 1).join("/");
+            <header className="sticky top-0 lg:top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-sm min-w-0 flex-1 overflow-hidden" data-testid="breadcrumbs">
+                <button onClick={() => goTo("")} className="font-semibold text-blue-600 hover:underline shrink-0 max-w-[40vw] sm:max-w-[220px] truncate">{active.name}</button>
+                {(() => {
+                  const TAIL = 2;
+                  const collapse = crumbs.length > TAIL + 1;
+                  const hidden = collapse ? crumbs.slice(0, crumbs.length - TAIL) : [];
+                  const tail = collapse ? crumbs.slice(-TAIL) : crumbs;
+                  const tailStart = collapse ? crumbs.length - TAIL : 0;
                   return (
-                    <span key={p} className="flex items-center gap-1.5 text-gray-500">
-                      <ChevronRight size={13} className="text-gray-300" />
-                      <button onClick={() => goTo(p)} className="hover:text-gray-900">{c}</button>
-                    </span>
+                    <>
+                      {collapse && (
+                        <>
+                          <ChevronRight size={13} className="text-gray-300 shrink-0" />
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button data-testid="breadcrumb-collapse" aria-label="Show hidden folders" className="shrink-0 h-6 w-7 flex items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-800 transition-colors">
+                                <MoreHorizontal size={16} />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="max-w-[260px]">
+                              {hidden.map((c, i) => {
+                                const p = crumbs.slice(0, i + 1).join("/");
+                                return (
+                                  <DropdownMenuItem key={p} onClick={() => goTo(p)} className="cursor-pointer">
+                                    <Folder size={14} className="mr-2 text-blue-500 shrink-0" />
+                                    <span className="truncate">{c}</span>
+                                  </DropdownMenuItem>
+                                );
+                              })}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </>
+                      )}
+                      {tail.map((c, i) => {
+                        const idx = tailStart + i;
+                        const p = crumbs.slice(0, idx + 1).join("/");
+                        const isLast = idx === crumbs.length - 1;
+                        return (
+                          <span key={p} className="flex items-center gap-1.5 min-w-0 shrink">
+                            <ChevronRight size={13} className="text-gray-300 shrink-0" />
+                            <button
+                              onClick={() => goTo(p)}
+                              className={`truncate max-w-[30vw] sm:max-w-[200px] ${isLast ? "font-medium text-gray-900" : "text-gray-500 hover:text-gray-900"}`}
+                              title={c}
+                            >
+                              {c}
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </>
                   );
-                })}
+                })()}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 {canWrite && (
                   <>
                     <button onClick={() => setNewFolder(true)} data-testid="new-folder-button" className={btnOutline}>
                       <FolderPlus size={15} /> <span className="hidden sm:inline">Folder</span>
                     </button>
                     <button onClick={() => fileInput.current?.click()} disabled={uploading} data-testid="upload-file-button" className={btnPrimary}>
-                      {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Upload
+                      {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} <span className="hidden sm:inline">Upload</span>
                     </button>
                     <input ref={fileInput} type="file" onChange={onUpload} className="hidden" data-testid="file-input" />
                   </>
@@ -225,56 +306,135 @@ export default function Files() {
             </header>
 
             <div className="p-4 sm:p-6">
-              <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm min-w-[520px]">
-                    <thead>
-                      <tr className="bg-gray-50 text-left border-b border-gray-200">
-                        <th className="px-4 py-2.5 overline">Name</th>
-                        <th className="px-4 py-2.5 overline w-32">Size</th>
-                        <th className="px-4 py-2.5 overline w-28 text-right">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody data-testid="file-list">
-                      {loading ? (
-                        <tr><td colSpan={3} className="px-4 py-12 text-center text-gray-400"><Loader2 size={18} className="animate-spin inline" /></td></tr>
-                      ) : items.length === 0 ? (
-                        <tr><td colSpan={3} className="px-4 py-16 text-center text-gray-400 text-sm">This folder is empty.</td></tr>
-                      ) : (
-                        items.map((item) => (
-                          <tr key={item.path} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors group" data-testid={`file-row-${item.name}`}>
-                            <td className="px-4 py-2.5">
-                              <button onClick={() => enter(item)} disabled={!item.is_dir} className={`flex items-center gap-2.5 ${item.is_dir ? "hover:text-blue-600 text-gray-800" : "cursor-default text-gray-700"}`}>
-                                {item.is_dir ? <Folder size={17} className="text-blue-500 shrink-0" fill="#dbeafe" /> : <FileIcon size={17} className="text-gray-400 shrink-0" />}
-                                <span className="truncate">{item.name}</span>
-                              </button>
-                            </td>
-                            <td className="px-4 py-2.5 text-gray-500">{item.is_dir ? "—" : fmtSize(item.size)}</td>
-                            <td className="px-4 py-2.5">
-                              <div className="flex items-center justify-end gap-1.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                {!item.is_dir && (
-                                  <button onClick={() => download(item)} data-testid={`download-${item.name}`} aria-label="Download" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
-                                    <Download size={14} />
-                                  </button>
-                                )}
-                                {canWrite && (
-                                  <button onClick={() => remove(item)} data-testid={`delete-file-${item.name}`} aria-label="Delete" className="p-1.5 border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
-                                    <Trash2 size={14} />
-                                  </button>
-                                )}
-                              </div>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
+              {/* toolbar: search + view toggle */}
+              <div className="flex items-center gap-3 mb-4 flex-wrap">
+                <div className="relative flex-1 min-w-[180px] max-w-sm">
+                  <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                  <input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search in this folder…"
+                    data-testid="file-search-input"
+                    className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
+                  />
+                </div>
+                <div className="text-xs text-gray-400 hidden sm:block">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</div>
+                <div className="ml-auto flex items-center bg-white border border-gray-200 rounded-xl p-1">
+                  <button onClick={() => setViewMode("list")} data-testid="view-list-button" aria-label="List view" className={`p-1.5 rounded-lg transition-colors ${view === "list" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
+                    <ListIcon size={16} />
+                  </button>
+                  <button onClick={() => setViewMode("grid")} data-testid="view-grid-button" aria-label="Grid view" className={`p-1.5 rounded-lg transition-colors ${view === "grid" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
+                    <LayoutGrid size={16} />
+                  </button>
                 </div>
               </div>
+
+              {loading ? (
+                <div className="py-20 text-center text-gray-400"><Loader2 size={22} className="animate-spin inline" /></div>
+              ) : filtered.length === 0 ? (
+                <div className="py-20 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-2xl">
+                  {query.trim() ? "No files match your search." : "This folder is empty."}
+                </div>
+              ) : view === "grid" ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3" data-testid="file-list">
+                  {filtered.map((item) => {
+                    const meta = fileMeta(item.name);
+                    const Ic = item.is_dir ? Folder : meta.icon;
+                    return (
+                      <div
+                        key={item.path}
+                        data-testid={`file-card-${item.name}`}
+                        onDoubleClick={() => openItem(item)}
+                        className="group relative bg-white border border-gray-200 rounded-2xl p-4 flex flex-col items-center text-center hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
+                        onClick={() => openItem(item)}
+                      >
+                        <div className={`h-14 w-14 rounded-xl flex items-center justify-center mb-2.5 ${item.is_dir ? "bg-blue-50 text-blue-500" : meta.box}`}>
+                          <Ic size={26} fill={item.is_dir ? "#dbeafe" : "none"} />
+                        </div>
+                        <div className="text-xs font-medium text-gray-800 truncate w-full" title={item.name}>{item.name}</div>
+                        <div className="text-[11px] text-gray-400 mt-0.5">{item.is_dir ? "Folder" : fmtSize(item.size)}</div>
+                        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          {!item.is_dir && (
+                            <button onClick={(e) => { e.stopPropagation(); download(item); }} data-testid={`download-${item.name}`} aria-label="Download" className="p-1.5 bg-white border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 shadow-sm">
+                              <Download size={13} />
+                            </button>
+                          )}
+                          {canWrite && (
+                            <button onClick={(e) => { e.stopPropagation(); remove(item); }} data-testid={`delete-file-${item.name}`} aria-label="Delete" className="p-1.5 bg-white border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-200 shadow-sm">
+                              <Trash2 size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm min-w-[520px]">
+                      <thead>
+                        <tr className="bg-gray-50 text-left border-b border-gray-200">
+                          <th className="px-4 py-2.5 overline">Name</th>
+                          <th className="px-4 py-2.5 overline w-32">Size</th>
+                          <th className="px-4 py-2.5 overline w-28 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody data-testid="file-list">
+                        {filtered.map((item) => {
+                          const meta = fileMeta(item.name);
+                          const Ic = item.is_dir ? Folder : meta.icon;
+                          return (
+                            <tr key={item.path} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors group cursor-pointer" data-testid={`file-row-${item.name}`} onClick={() => openItem(item)}>
+                              <td className="px-4 py-2.5">
+                                <div className={`flex items-center gap-2.5 ${item.is_dir ? "text-gray-800" : "text-gray-700"}`}>
+                                  <span className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${item.is_dir ? "bg-blue-50 text-blue-500" : meta.box}`}>
+                                    <Ic size={16} fill={item.is_dir ? "#dbeafe" : "none"} />
+                                  </span>
+                                  <span className="truncate">{item.name}</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-2.5 text-gray-500">{item.is_dir ? "—" : fmtSize(item.size)}</td>
+                              <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
+                                <div className="flex items-center justify-end gap-1.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                  {!item.is_dir && isPreviewable(item.name) && (
+                                    <button onClick={() => setPreview(item)} data-testid={`preview-${item.name}`} aria-label="Preview" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                                      <Eye size={14} />
+                                    </button>
+                                  )}
+                                  {!item.is_dir && (
+                                    <button onClick={() => download(item)} data-testid={`download-${item.name}`} aria-label="Download" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                                      <Download size={14} />
+                                    </button>
+                                  )}
+                                  {canWrite && (
+                                    <button onClick={() => remove(item)} data-testid={`delete-file-${item.name}`} aria-label="Delete" className="p-1.5 border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
+                                      <Trash2 size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
       </div>
+
+      {preview && (
+        <FilePreview
+          storageId={active.id}
+          item={preview}
+          onClose={() => setPreview(null)}
+          onDownload={download}
+        />
+      )}
 
       {newFolder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
