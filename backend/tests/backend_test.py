@@ -382,7 +382,85 @@ class TestAccessAndPermissions:
 
 
 # ============ ACTIVITY LOGS ============
+# ============ CLIENT ERROR REPORTING (iteration 7) ============
+class TestClientErrors:
+    def test_report_error_anonymous_records_log(self):
+        marker = f"TEST_err_anon_{uuid.uuid4().hex[:8]}"
+        r = requests.post(f"{API}/errors", json={"message": marker, "stack": "s", "path": "/x"})
+        assert r.status_code == 200, r.text
+        assert r.json().get("status") == "logged"
+        # verify via /api/logs search
+        h = _admin_headers()
+        g = requests.get(f"{API}/logs", params={"search": marker, "limit": 10}, headers=h)
+        assert g.status_code == 200
+        items = g.json()["items"]
+        assert any(i["action"] == "client_error" and marker in (i.get("detail") or "") for i in items), items
+        anon = [i for i in items if i["user_email"] == "anonymous"]
+        assert anon, "anonymous caller should record user_email='anonymous'"
+
+    def test_report_error_authenticated_uses_email(self):
+        h = _admin_headers()
+        token = h["Authorization"].split()[1]
+        marker = f"TEST_err_auth_{uuid.uuid4().hex[:8]}"
+        r = requests.post(
+            f"{API}/errors",
+            json={"message": marker, "stack": "trace", "path": "/dashboard"},
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert r.status_code == 200
+        g = requests.get(f"{API}/logs", params={"search": marker}, headers=h).json()
+        rows = [i for i in g["items"] if marker in (i.get("detail") or "")]
+        assert rows, "created client_error not found via search"
+        assert rows[0]["action"] == "client_error"
+        assert rows[0]["user_email"] == ADMIN_EMAIL
+
+
 class TestLogs:
+    def test_logs_default_limit_is_10(self):
+        """Iteration 7: default page size is 10."""
+        h = _admin_headers()
+        # Seed enough activity via /api/errors so total >= 12
+        for i in range(12):
+            requests.post(f"{API}/errors", json={"message": f"TEST_pg_seed_{uuid.uuid4().hex[:6]}", "stack": "", "path": "/"})
+        r = requests.get(f"{API}/logs", headers=h)
+        assert r.status_code == 200
+        d = r.json()
+        assert len(d["items"]) <= 10
+        if d["total"] >= 10:
+            assert len(d["items"]) == 10
+
+    def test_logs_search_filters_items_but_not_counts(self):
+        """Iteration 7: ?search filters items+total; counts remain global."""
+        h = _admin_headers()
+        marker = f"TEST_srch_{uuid.uuid4().hex[:10]}"
+        requests.post(f"{API}/errors", json={"message": marker, "stack": "", "path": "/probe"})
+        # global counts (no search)
+        g_all = requests.get(f"{API}/logs", headers=h).json()
+        g_srch = requests.get(f"{API}/logs", params={"search": marker}, headers=h).json()
+        # counts must be global (unchanged by search) — allow small drift for parallel writes
+        for k in ("all", "file", "conn", "reconnect"):
+            assert abs(g_srch["counts"][k] - g_all["counts"][k]) <= 5
+        # every item matches marker somewhere
+        assert g_srch["total"] >= 1
+        for it in g_srch["items"]:
+            hay = " ".join(str(it.get(k) or "") for k in ("user_email", "action", "storage_name", "path", "detail")).lower()
+            assert marker.lower() in hay, it
+        # searching a nonsense string returns 0 items
+        nope = requests.get(f"{API}/logs", params={"search": f"__no_match_{uuid.uuid4().hex}"}, headers=h).json()
+        assert nope["total"] == 0
+        assert nope["items"] == []
+        # counts still global on the nonsense search (allow small drift)
+        for k in ("all", "file", "conn", "reconnect"):
+            assert abs(nope["counts"][k] - g_all["counts"][k]) <= 5
+
+    def test_logs_search_case_insensitive(self):
+        h = _admin_headers()
+        marker = f"TEST_CASE_{uuid.uuid4().hex[:8]}"
+        requests.post(f"{API}/errors", json={"message": marker, "stack": "", "path": "/"})
+        low = requests.get(f"{API}/logs", params={"search": marker.lower()}, headers=h).json()
+        up = requests.get(f"{API}/logs", params={"search": marker.upper()}, headers=h).json()
+        assert low["total"] >= 1 and up["total"] >= 1
+
     def test_logs_requires_auth(self):
         r = requests.get(f"{API}/logs")
         assert r.status_code == 401
@@ -411,8 +489,8 @@ class TestLogs:
         assert "counts" in data and isinstance(data["counts"], dict)
         for k in ("all", "file", "conn", "reconnect"):
             assert k in data["counts"]
-        # default limit 25
-        assert len(data["items"]) <= 25
+        # default limit 10 (iteration 7)
+        assert len(data["items"]) <= 10
         for entry in data["items"]:
             for k in ("id", "user_email", "action", "storage_name", "path", "timestamp", "detail"):
                 assert k in entry, f"log entry missing key {k}: {entry}"

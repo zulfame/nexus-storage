@@ -11,6 +11,7 @@ import Files from "@/pages/Files";
 import Logs from "@/pages/Logs";
 import ManageApp from "@/pages/ManageApp";
 import { SettingsProvider } from "@/context/SettingsContext";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 function ProtectedRoute({ children, adminOnly }) {
   const { user, loading } = useAuth();
@@ -89,7 +90,9 @@ function App() {
       <SettingsProvider>
         <AuthProvider>
           <BrowserRouter>
-            <AppRoutes />
+            <ErrorBoundary>
+              <AppRoutes />
+            </ErrorBoundary>
           </BrowserRouter>
           <Toaster position="bottom-right" theme="dark" />
         </AuthProvider>

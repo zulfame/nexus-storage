@@ -6,6 +6,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
 import logging
+import re
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -91,6 +92,13 @@ async def require_admin(user: dict = Depends(get_current_user)) -> dict:
     if user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return user
+
+
+async def get_optional_user(request: Request):
+    try:
+        return await get_current_user(request)
+    except HTTPException:
+        return None
 
 
 def user_public(user: dict) -> dict:
@@ -221,6 +229,12 @@ class SettingsBody(BaseModel):
     favicon_url: str = ""
     logo_url: str = ""
     primary_color: str = ""
+
+
+class ClientErrorBody(BaseModel):
+    message: str = ""
+    stack: str = ""
+    path: str = ""
 
 
 DEFAULT_SETTINGS = {
@@ -502,15 +516,27 @@ async def create_folder(storage_id: str, body: FolderBody, user: dict = Depends(
 async def list_logs(
     admin: dict = Depends(require_admin),
     skip: int = Query(0, ge=0),
-    limit: int = Query(25, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=100),
     category: str = "all",
+    search: str = "",
 ):
+    conds = []
     if category == "file":
-        q = {"action": {"$in": FILE_ACTIONS}}
+        conds.append({"action": {"$in": FILE_ACTIONS}})
     elif category == "conn":
-        q = {"action": {"$nin": FILE_ACTIONS}}
-    else:
-        q = {}
+        conds.append({"action": {"$nin": FILE_ACTIONS}})
+    if search.strip():
+        rx = {"$regex": re.escape(search.strip()), "$options": "i"}
+        conds.append(
+            {"$or": [
+                {"user_email": rx},
+                {"action": rx},
+                {"storage_name": rx},
+                {"path": rx},
+                {"detail": rx},
+            ]}
+        )
+    q = {"$and": conds} if conds else {}
     total = await db.activity_logs.count_documents(q)
     logs = await db.activity_logs.find(q).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
     items = [
@@ -556,6 +582,24 @@ async def delete_logs(
 @api_router.get("/settings")
 async def get_app_settings():
     return await get_settings()
+
+
+@api_router.post("/errors")
+async def report_client_error(body: ClientErrorBody, request: Request):
+    user = await get_optional_user(request)
+    email = user.get("email") if user else "anonymous"
+    await db.activity_logs.insert_one(
+        {
+            "user_email": email,
+            "action": "client_error",
+            "storage_name": None,
+            "storage_type": None,
+            "path": (body.path or "")[:300],
+            "detail": (body.message or "Unknown client error")[:500],
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    return {"status": "logged"}
 
 
 @api_router.put("/settings")

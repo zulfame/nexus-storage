@@ -9,6 +9,7 @@ import {
   Pencil,
   Activity,
   Settings,
+  AlertTriangle,
 } from "lucide-react";
 
 export const LOG_META = {
@@ -23,6 +24,7 @@ export const LOG_META = {
   storage_updated: { label: "Storage Updated", icon: Pencil, color: "#2563eb", cat: "conn" },
   storage_deleted: { label: "Storage Removed", icon: Trash2, color: "#dc2626", cat: "conn" },
   settings_updated: { label: "App Settings", icon: Settings, color: "#0891b2", cat: "conn" },
+  client_error: { label: "App Error", icon: AlertTriangle, color: "#dc2626", cat: "conn" },
 };
 
 export function metaFor(action) {

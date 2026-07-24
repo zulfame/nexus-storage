@@ -15,9 +15,10 @@ import {
   ChevronLeft,
   ChevronRight,
   Loader2,
+  Search,
 } from "lucide-react";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 10;
 
 function StatCard({ label, value, icon: Icon, color }) {
   return (
@@ -38,6 +39,7 @@ export default function Logs() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
   const [delOpen, setDelOpen] = useState(false);
   const [range, setRange] = useState({ start: "", end: "" });
   const [deleting, setDeleting] = useState(false);
@@ -45,17 +47,18 @@ export default function Logs() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await api.get("/logs", { params: { skip: page * PAGE_SIZE, limit: PAGE_SIZE, category: filter } });
+      const { data } = await api.get("/logs", { params: { skip: page * PAGE_SIZE, limit: PAGE_SIZE, category: filter, search } });
       setData(data);
     } catch (e) {
       toast.error(apiError(e));
     } finally {
       setLoading(false);
     }
-  }, [page, filter]);
+  }, [page, filter, search]);
 
   useEffect(() => {
-    load();
+    const t = setTimeout(load, 300);
+    return () => clearTimeout(t);
   }, [load]);
 
   const setTab = (k) => {
@@ -110,12 +113,24 @@ export default function Logs() {
           <StatCard label="Auto-Reconnects" value={counts.reconnect ?? 0} icon={PlugZap} color="#d97706" />
         </div>
 
-        <div className="flex items-center gap-1 mb-4 bg-white border border-gray-200 rounded-xl p-1 w-fit shadow-sm">
-          {tabs.map((t) => (
-            <button key={t.k} onClick={() => setTab(t.k)} data-testid={`logs-filter-${t.k}`} className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors ${filter === t.k ? "bg-primary text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}>
-              {t.label}
-            </button>
-          ))}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 w-fit shadow-sm">
+            {tabs.map((t) => (
+              <button key={t.k} onClick={() => setTab(t.k)} data-testid={`logs-filter-${t.k}`} className={`text-sm font-medium px-4 py-1.5 rounded-lg transition-colors ${filter === t.k ? "bg-primary text-white shadow-sm" : "text-gray-600 hover:bg-gray-100"}`}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="relative w-full sm:w-72">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(0); }}
+              data-testid="logs-search"
+              placeholder="Search user, action, storage, path…"
+              className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
+            />
+          </div>
         </div>
 
         <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden" data-testid="logs-table">
