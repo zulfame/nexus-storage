@@ -182,10 +182,16 @@ export default function Files() {
       {/* browser */}
       <div className="flex-1 min-w-0">
         {!active ? (
-          <div className="flex flex-col items-center justify-center h-96 text-gray-400">
-            <HardDrive size={40} className="mb-4 opacity-40" />
-            <p className="text-sm">Select or ask an admin to assign a storage.</p>
-          </div>
+          <>
+            <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold text-gray-700">File Browser</div>
+              <UserMenu />
+            </header>
+            <div className="flex flex-col items-center justify-center h-96 text-gray-400">
+              <HardDrive size={40} className="mb-4 opacity-40" />
+              <p className="text-sm">No storage assigned yet. Ask an admin to grant you access.</p>
+            </div>
+          </>
         ) : (
           <>
             <header className="sticky top-0 lg:top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 flex-wrap">

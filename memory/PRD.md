@@ -50,8 +50,20 @@ config, README env-var table).
 - Guarded update_storage against secret loss on storage type change.
 - Verified: 22/22 backend tests, 100% frontend flows (desktop + mobile).
 
+## Implemented (2026-07-24, iterations 5-6)
+- Manage App page (public GET /api/settings, admin PUT): app name, tagline, meta description,
+  favicon URL, logo URL, primary color — applied dynamically across all pages incl. login
+  (document.title, meta, favicon, branding) via SettingsContext.
+- Sidebar order: Dashboard, File Browser, List Storage, Logs Activity, Manage App, Manage User.
+- Dashboard: recent-activity feed, storage breakdown bars, team summary (Getting Started removed).
+- Getting Started card moved to List Storage (full-width).
+- Logs Activity: server-side pagination (25/page) with counts, category filter, and Clear-Logs
+  by date range (DELETE /api/logs?start&end).
+- Header UserMenu on every page (incl. Files empty-state) with Change Password dialog +
+  Sign out; POST /api/auth/change-password (bcrypt verify + rehash, >=6 chars).
+- Verified: 32/32 backend tests; frontend flows pass desktop + mobile.
+
 ## Backlog / Next
-- P1: Storage config validation (required fields per type); 404 on unknown/malformed ids;
-  connection-test timeout hardening.
-- P2: Logs pagination/filters (user/action/storage/date); dedicated STORAGE_ENCRYPTION_KEY env.
+- P1: Storage config validation (required fields per type); 404 on unknown/malformed ids.
+- P2: dedicated STORAGE_ENCRYPTION_KEY env; log counts via single aggregation; native BSON date timestamps.
 - P2: File rename/move/copy across storages; multi-file upload with progress; storage usage metrics.
