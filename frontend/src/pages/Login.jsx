@@ -5,6 +5,7 @@ import { useSettings } from "@/context/SettingsContext";
 import { apiError } from "@/lib/api";
 import { Database, Loader2, HardDrive, Cloud, Server } from "lucide-react";
 import { toast } from "sonner";
+import { PasswordInput } from "@/components/PasswordInput";
 
 export default function Login() {
   const { login } = useAuth();
@@ -94,14 +95,12 @@ export default function Login() {
             </div>
             <div>
               <label className="text-sm font-medium text-gray-700 block mb-1.5">Password</label>
-              <input
-                type="password"
-                required
+              <PasswordInput
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                data-testid="login-password-input"
+                onChange={setPassword}
+                testid="login-password-input"
                 placeholder="••••••••"
-                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
+                autoComplete="current-password"
               />
             </div>
             <button

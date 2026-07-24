@@ -446,6 +446,17 @@ async def test_config(body: StorageBody, admin: dict = Depends(require_admin)):
         return {"success": False, "message": humanize_storage_error(e)}
 
 
+@api_router.get("/storages/{storage_id}/config")
+async def get_storage_config(storage_id: str, admin: dict = Depends(require_admin)):
+    doc = await get_storage_or_404(storage_id)
+    return {
+        "id": str(doc["_id"]),
+        "name": doc["name"],
+        "type": doc["type"],
+        "config": decrypt_config(doc),
+    }
+
+
 @api_router.post("/storages/{storage_id}/test")
 async def test_saved(storage_id: str, admin: dict = Depends(require_admin)):
     doc = await get_storage_or_404(storage_id)

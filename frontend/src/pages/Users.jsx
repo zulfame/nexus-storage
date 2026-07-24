@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { UserPlus, Trash2, ShieldCheck, Loader2, KeyRound, Pencil } from "lucide-react";
+import { PasswordInput } from "@/components/PasswordInput";
 
 const btnPrimary =
   "flex items-center gap-2 bg-primary text-white font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors shadow-sm";
@@ -178,7 +179,6 @@ export default function Users() {
               {[
                 { k: "email", label: "Email", type: "email", ph: "user@example.com", tid: "new-user-email" },
                 { k: "name", label: "Name", type: "text", ph: "Jane Doe", tid: "new-user-name" },
-                { k: "password", label: "Password", type: "password", ph: "••••••", tid: "new-user-password" },
               ].map((f) => (
                 <div key={f.k}>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">{f.label}</label>
@@ -192,6 +192,15 @@ export default function Users() {
                   />
                 </div>
               ))}
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1.5">Password</label>
+                <PasswordInput
+                  value={form.password}
+                  onChange={(v) => setForm((s) => ({ ...s, password: v }))}
+                  placeholder="••••••"
+                  testid="new-user-password"
+                />
+              </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">Role</label>
                 <div className="flex gap-2">
@@ -273,7 +282,12 @@ export default function Users() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">New password <span className="text-gray-400 font-normal">(optional)</span></label>
-                <input type="password" value={editForm.password} onChange={(e) => setEditForm((s) => ({ ...s, password: e.target.value }))} data-testid="edit-user-password" placeholder="Leave blank to keep current" className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors" />
+                <PasswordInput
+                  value={editForm.password}
+                  onChange={(v) => setEditForm((s) => ({ ...s, password: v }))}
+                  placeholder="Leave blank to keep current"
+                  testid="edit-user-password"
+                />
               </div>
             </div>
             <div className="p-6 border-t border-gray-100 flex justify-end gap-2">

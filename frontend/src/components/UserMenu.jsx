@@ -3,6 +3,7 @@ import { useAuth } from "@/context/AuthContext";
 import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
 import { ChevronDown, KeyRound, LogOut, Loader2, ShieldCheck } from "lucide-react";
+import { PasswordInput } from "@/components/PasswordInput";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -80,14 +81,12 @@ export function UserMenu() {
               ].map((f) => (
                 <div key={f.k}>
                   <label className="text-sm font-medium text-gray-700 block mb-1.5">{f.label}</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={pw[f.k]}
-                    onChange={(e) => setPw((s) => ({ ...s, [f.k]: e.target.value }))}
+                    onChange={(v) => setPw((s) => ({ ...s, [f.k]: v }))}
                     onKeyDown={(e) => e.key === "Enter" && submit()}
-                    data-testid={f.tid}
+                    testid={f.tid}
                     placeholder="••••••••"
-                    className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
                   />
                 </div>
               ))}

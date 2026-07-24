@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
-import { Cloud, Server, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen } from "lucide-react";
+import { Cloud, Server, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff } from "lucide-react";
 
 const empty = {
   name: "",
@@ -23,17 +23,34 @@ const empty = {
 };
 
 function Field({ label, value, onChange, placeholder, type = "text", testid }) {
+  const [show, setShow] = useState(false);
+  const isSecret = type === "password";
   return (
     <div>
       <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        data-testid={testid}
-        className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
-      />
+      <div className="relative">
+        <input
+          type={isSecret && !show ? "password" : "text"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          autoComplete={isSecret ? "new-password" : "off"}
+          data-testid={testid}
+          className={`w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 ${isSecret ? "pr-11" : ""} text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors`}
+        />
+        {isSecret && (
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => setShow((s) => !s)}
+            data-testid={testid ? `${testid}-toggle` : undefined}
+            aria-label={show ? "Hide value" : "Show value"}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-blue-600 transition-colors"
+          >
+            {show ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -68,14 +85,16 @@ export default function Storages() {
     setOpen(true);
   };
 
-  const openEdit = (s) => {
-    setForm({
-      name: s.name,
-      type: s.type,
-      config: { ...empty.config, ...s.config, secret_key: "", password: "" },
-    });
+  const openEdit = async (s) => {
     setEditId(s.id);
+    setForm({ name: s.name, type: s.type, config: { ...empty.config, ...s.config } });
     setOpen(true);
+    try {
+      const r = await api.get(`/storages/${s.id}/config`);
+      setForm({ name: r.data.name, type: r.data.type, config: { ...empty.config, ...r.data.config } });
+    } catch (e) {
+      toast.error(apiError(e));
+    }
   };
 
   const payload = () => {
@@ -256,7 +275,7 @@ export default function Storages() {
                   <Field label="Region" value={form.config.region} onChange={(v) => setCfg("region", v)} placeholder="us-east-1" testid="s3-region-input" />
                   <Field label="Endpoint (optional, for MinIO/Wasabi)" value={form.config.endpoint} onChange={(v) => setCfg("endpoint", v)} placeholder="https://s3.example.com" testid="s3-endpoint-input" />
                   <Field label="Access Key" value={form.config.access_key} onChange={(v) => setCfg("access_key", v)} placeholder="AKIA…" testid="s3-access-key-input" />
-                  <Field label={editId ? "Secret Key (leave blank to keep)" : "Secret Key"} value={form.config.secret_key} onChange={(v) => setCfg("secret_key", v)} placeholder="••••••" type="password" testid="s3-secret-key-input" />
+                  <Field label="Secret Key" value={form.config.secret_key} onChange={(v) => setCfg("secret_key", v)} placeholder="••••••" type="password" testid="s3-secret-key-input" />
                 </>
               ) : (
                 <>
@@ -264,7 +283,7 @@ export default function Storages() {
                   <Field label="Share" value={form.config.share} onChange={(v) => setCfg("share", v)} placeholder="shared" testid="samba-share-input" />
                   <Field label="Port (SMB default: 445)" value={form.config.port} onChange={(v) => setCfg("port", v)} placeholder="445" testid="samba-port-input" />
                   <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="user" testid="samba-username-input" />
-                  <Field label={editId ? "Password (leave blank to keep)" : "Password"} value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="samba-password-input" />
+                  <Field label="Password" value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="samba-password-input" />
                   <Field label="Domain (optional)" value={form.config.domain} onChange={(v) => setCfg("domain", v)} placeholder="WORKGROUP" testid="samba-domain-input" />
                 </>
               )}
