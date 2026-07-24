@@ -126,13 +126,31 @@ class S3Backend:
 
 class SambaBackend:
     def __init__(self, cfg: dict):
-        self.server = cfg["host"]
-        self.share = cfg["share"]
+        raw_host = (cfg.get("host") or "").strip()
+        # Be forgiving: accept "smb://host", "\\host", "//host", "host/share", "host:port".
+        for prefix in ("smb://", "SMB://", "cifs://"):
+            if raw_host.startswith(prefix):
+                raw_host = raw_host[len(prefix):]
+        raw_host = raw_host.strip("\\/").strip()
+        # If a share path was included in the host, keep only the first segment as host.
+        raw_host = raw_host.replace("\\", "/").split("/")[0].strip()
+
+        port = cfg.get("port")
+        # Split an embedded "host:port" (ignore IPv6 in brackets).
+        if ":" in raw_host and not raw_host.startswith("["):
+            h, _, p = raw_host.rpartition(":")
+            if p.isdigit():
+                raw_host = h
+                if not port:
+                    port = p
+
+        self.server = raw_host
+        self.share = (cfg.get("share") or "").strip().strip("\\/")
         self.username = cfg.get("username")
         self.password = cfg.get("password")
         self.domain = cfg.get("domain") or ""
         try:
-            self.port = int(cfg.get("port") or 445)
+            self.port = int(port or 445)
         except (TypeError, ValueError):
             self.port = 445
         self.reconnected = False
