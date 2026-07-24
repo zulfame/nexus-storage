@@ -592,13 +592,21 @@ async def root():
 # ---------------------------------------------------------------- app wiring
 app.include_router(api_router)
 
+_cors_env = os.environ.get("CORS_ORIGINS", "*")
+_cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] or ["*"]
+# App auth uses Bearer tokens (no cookies), so credentials aren't required.
+# Browsers reject "*" together with allow_credentials=True, so only enable
+# credentials when explicit origins are configured.
+_allow_credentials = "*" not in _cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_credentials=True,
-    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
+    allow_credentials=_allow_credentials,
+    allow_origins=_cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info("CORS origins=%s credentials=%s", _cors_origins, _allow_credentials)
 
 
 DEFAULT_ADMIN_EMAIL = "admin@example.com"
