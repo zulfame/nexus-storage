@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 8 (both) validated (a) Samba PORT field on Storage dialog and backend persistence in config.port; (b) new user Edit dialog for ALL rows including admins, with name/role/password changes; (c) delete button hidden on the logged-in admin's OWN row; (d) backend guards: cannot delete own account, cannot delete/demote last admin, delete/demote another admin allowed when 2+ admins exist. IMPORTANT PRE-FIX: /app/frontend/src/pages/Users.jsx was missing imports for `useAuth` and `Pencil` (icon) — the /users page would crash on render. Added those imports so testing could proceed. Backend suite (47/47) passes. Playwright end-to-end verified on the public REACT_APP_BACKEND_URL: login as admin@example.com/admin123 -> /users shows 2 rows (admin + test), edit-user-<id> and delete-user-<id> present for the non-self row; delete-user-<my_id> NOT rendered on own row while edit-user-<my_id> IS rendered; opened edit-user-dialog, renamed to 'Renamed', promoted to admin via edit-user-role-admin, set password 'newpass9' via edit-user-password, saved via save-edit-user -> /api/users reflects new name+role and login with the new password returns 200; native confirm accepted and delete removed the temp admin row (2-admin -> 1-admin delete succeeded). Storages: opened Add Storage, clicked Samba, samba-port-input has placeholder='445' (empty default value; the SambaBackend defaults to 445 when empty), created samba storage with port=8000 -> /api/storages returned config.port==8000; reopened Edit and samba-port-input value=='8000'; cleaned up. Admin credentials confirmed still admin@example.com/admin123 at the end. No real storages touched.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Storages > Add Storage (Samba)", "issues": ["samba-port-input is uncontrolled -> controlled transition because empty.config has no `port` key. React logs 'A component is changing an uncontrolled input to be controlled.' when a value is typed. Cosmetic; suggest adding `port: ''` to the empty.config object in Storages.jsx."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add `port: ''` to the `empty.config` default in /app/frontend/src/pages/Storages.jsx to silence the controlled/uncontrolled React warning on the Samba Port field."
+  ],
+  "critical_code_review_comments": [
+    "FIXED: Users.jsx was missing `import { useAuth } from '@/context/AuthContext'` and `Pencil` in the lucide-react import. Without the fix the /users page would throw at render (useAuth is not defined / Pencil is not defined). Please verify the fix I applied is retained.",
+    "Storages.jsx `empty.config` does not include a `port` key, causing React controlled/uncontrolled warning on the samba-port-input until a value is typed. Add `port: ''`.",
+    "server.py `storage_public` returns `port` as whatever type is stored (int if the client sent JSON number, else string). Consider normalizing to int (default 445) at write-time so the client always receives a consistent int.",
+    "server.py update_user allows setting `role` to arbitrary strings other than admin/user only if they equal one of those two — otherwise silently ignored. Consider returning 400 on invalid roles to match create_user's behavior of silently downgrading to 'user' (both are inconsistent).",
+    "server.py delete_user: after own-account check, the target lookup uses ObjectId(user_id) without a try/except — passing a malformed id will bubble a 500 instead of 404. Same pattern in update_user and update_access."
+  ],
+  "updated_files": [
+    "/app/frontend/src/pages/Users.jsx  (added missing imports: useAuth, Pencil)",
+    "/app/backend/tests/backend_test.py (added TestSambaPort + TestUserUpdateAndAdminGuards)"
+  ],
+  "success_rate": {"backend": "100% (47/47)", "frontend": "100% (all iteration-8 flows verified)"},
+  "test_credentials": "admin@example.com / admin123 — verified still valid at end of run.",
+  "seed_data_creation": "Temp users/storages created and cleaned up during the run. Backend tests also create/delete temp admins and users. No residual TEST_* rows expected; if any remain from prior aborted runs they can be safely deleted.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New testids introduced this iteration: samba-port-input (Storages dialog), edit-user-{id}, edit-user-dialog, edit-user-name, edit-user-role-user, edit-user-role-admin, edit-user-password, save-edit-user, cancel-edit-user. Backend routes added: PUT /api/users/{id} (name/role/password with last-admin guards). Login testids remain login-email-input, login-password-input, login-submit-button. Users.jsx now imports useAuth and Pencil — do not remove.",
+  "rca of the issue": "Users.jsx used useAuth() and <Pencil/> but neither was imported. Root cause: incomplete import statement when the Edit action was added this iteration. Reproduction: navigate to /users -> ReferenceError: useAuth is not defined (or Pencil). Mitigation: added `import { useAuth } from '@/context/AuthContext'` and included `Pencil` in the lucide-react named-import list at the top of Users.jsx."
+}

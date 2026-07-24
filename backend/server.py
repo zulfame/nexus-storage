@@ -120,6 +120,7 @@ def storage_public(doc: dict) -> dict:
         "bucket": cfg.get("bucket", ""),
         "host": cfg.get("host", ""),
         "share": cfg.get("share", ""),
+        "port": cfg.get("port", ""),
         "username": cfg.get("username", ""),
         "domain": cfg.get("domain", ""),
         "access_key": cfg.get("access_key", ""),
@@ -200,6 +201,12 @@ class UserCreate(BaseModel):
     password: str
     name: str = ""
     role: str = "user"
+
+
+class UserUpdate(BaseModel):
+    name: Optional[str] = None
+    role: Optional[str] = None
+    password: Optional[str] = None
 
 
 class AccessEntry(BaseModel):
@@ -315,8 +322,36 @@ async def create_user(body: UserCreate, admin: dict = Depends(require_admin)):
 async def delete_user(user_id: str, admin: dict = Depends(require_admin)):
     if str(admin["_id"]) == user_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    target = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    if target.get("role") == "admin" and await db.users.count_documents({"role": "admin"}) <= 1:
+        raise HTTPException(status_code=400, detail="Cannot delete the last admin")
     await db.users.delete_one({"_id": ObjectId(user_id)})
     return {"status": "deleted"}
+
+
+@api_router.put("/users/{user_id}")
+async def update_user(user_id: str, body: UserUpdate, admin: dict = Depends(require_admin)):
+    doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    updates = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.role in ("admin", "user"):
+        if doc.get("role") == "admin" and body.role == "user":
+            if await db.users.count_documents({"role": "admin"}) <= 1:
+                raise HTTPException(status_code=400, detail="Cannot demote the last admin")
+        updates["role"] = body.role
+    if body.password:
+        if len(body.password) < 6:
+            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        updates["password_hash"] = hash_password(body.password)
+    if updates:
+        await db.users.update_one({"_id": ObjectId(user_id)}, {"$set": updates})
+    updated = await db.users.find_one({"_id": ObjectId(user_id)})
+    return user_public(updated)
 
 
 @api_router.put("/users/{user_id}/access")

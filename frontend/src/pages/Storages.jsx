@@ -82,7 +82,7 @@ export default function Storages() {
     const config =
       form.type === "s3"
         ? { region: c.region, endpoint: c.endpoint, bucket: c.bucket, access_key: c.access_key, secret_key: c.secret_key }
-        : { host: c.host, share: c.share, username: c.username, password: c.password, domain: c.domain };
+        : { host: c.host, share: c.share, port: c.port, username: c.username, password: c.password, domain: c.domain };
     return { name: form.name, type: form.type, config };
   };
 
@@ -261,6 +261,7 @@ export default function Storages() {
                 <>
                   <Field label="Host / IP" value={form.config.host} onChange={(v) => setCfg("host", v)} placeholder="192.168.1.10" testid="samba-host-input" />
                   <Field label="Share" value={form.config.share} onChange={(v) => setCfg("share", v)} placeholder="shared" testid="samba-share-input" />
+                  <Field label="Port" value={form.config.port} onChange={(v) => setCfg("port", v)} placeholder="445" testid="samba-port-input" />
                   <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="user" testid="samba-username-input" />
                   <Field label={editId ? "Password (leave blank to keep)" : "Password"} value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="samba-password-input" />
                   <Field label="Domain (optional)" value={form.config.domain} onChange={(v) => setCfg("domain", v)} placeholder="WORKGROUP" testid="samba-domain-input" />

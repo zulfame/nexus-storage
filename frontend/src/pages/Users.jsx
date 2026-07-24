@@ -1,14 +1,16 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
-import { UserPlus, Trash2, ShieldCheck, Loader2, KeyRound } from "lucide-react";
+import { UserPlus, Trash2, ShieldCheck, Loader2, KeyRound, Pencil } from "lucide-react";
 
 const btnPrimary =
   "flex items-center gap-2 bg-primary text-white font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors shadow-sm";
 const btnGhost = "text-sm font-medium px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors";
 
 export default function Users() {
+  const { user: me } = useAuth();
   const [users, setUsers] = useState([]);
   const [storages, setStorages] = useState([]);
   const [openNew, setOpenNew] = useState(false);
@@ -16,6 +18,9 @@ export default function Users() {
   const [saving, setSaving] = useState(false);
   const [accessUser, setAccessUser] = useState(null);
   const [access, setAccess] = useState({});
+  const [editUser, setEditUser] = useState(null);
+  const [editForm, setEditForm] = useState({ name: "", role: "user", password: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const load = () => {
     api.get("/users").then((r) => setUsers(r.data)).catch((e) => toast.error(apiError(e)));
@@ -80,6 +85,27 @@ export default function Users() {
     }
   };
 
+  const openEdit = (u) => {
+    setEditForm({ name: u.name || "", role: u.role || "user", password: "" });
+    setEditUser(u);
+  };
+
+  const saveEdit = async () => {
+    setSavingEdit(true);
+    try {
+      const payload = { name: editForm.name, role: editForm.role };
+      if (editForm.password) payload.password = editForm.password;
+      await api.put(`/users/${editUser.id}`, payload);
+      toast.success("User updated");
+      setEditUser(null);
+      load();
+    } catch (e) {
+      toast.error(apiError(e));
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   return (
     <div>
       <PageHeader overline="Access Control" title="Manage User">
@@ -124,7 +150,10 @@ export default function Users() {
                             <KeyRound size={13} /> Access
                           </button>
                         )}
-                        {u.role !== "admin" && (
+                        <button onClick={() => openEdit(u)} data-testid={`edit-user-${u.id}`} aria-label="Edit user" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                          <Pencil size={14} />
+                        </button>
+                        {me?.id !== u.id && (
                           <button onClick={() => remove(u)} data-testid={`delete-user-${u.id}`} aria-label="Delete user" className="p-1.5 border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
                             <Trash2 size={14} />
                           </button>
@@ -215,6 +244,43 @@ export default function Users() {
             <div className="p-6 border-t border-gray-100 flex justify-end gap-2">
               <button onClick={() => setAccessUser(null)} data-testid="cancel-access-button" className={btnGhost}>Cancel</button>
               <button onClick={saveAccess} data-testid="save-access-button" className={btnPrimary}>Save Access</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {editUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-md shadow-2xl" data-testid="edit-user-dialog">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="font-display font-bold text-xl tracking-tight text-gray-900">Edit User</h3>
+              <p className="text-sm text-gray-500 mt-1">{editUser.email}</p>
+            </div>
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1.5">Name</label>
+                <input value={editForm.name} onChange={(e) => setEditForm((s) => ({ ...s, name: e.target.value }))} data-testid="edit-user-name" placeholder="Full name" className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors" />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1.5">Role</label>
+                <div className="flex gap-2">
+                  {["user", "admin"].map((r) => (
+                    <button key={r} onClick={() => setEditForm((s) => ({ ...s, role: r }))} data-testid={`edit-user-role-${r}`} className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-colors ${editForm.role === r ? "border-primary text-blue-700 bg-blue-50" : "border-gray-200 text-gray-500 hover:bg-gray-50"}`}>
+                      {r}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1.5">New password <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input type="password" value={editForm.password} onChange={(e) => setEditForm((s) => ({ ...s, password: e.target.value }))} data-testid="edit-user-password" placeholder="Leave blank to keep current" className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors" />
+              </div>
+            </div>
+            <div className="p-6 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setEditUser(null)} data-testid="cancel-edit-user" className={btnGhost}>Cancel</button>
+              <button onClick={saveEdit} disabled={savingEdit} data-testid="save-edit-user" className={btnPrimary + " disabled:opacity-60"}>
+                {savingEdit && <Loader2 size={15} className="animate-spin" />} Save
+              </button>
             </div>
           </div>
         </div>

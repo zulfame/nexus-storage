@@ -131,13 +131,19 @@ class SambaBackend:
         self.username = cfg.get("username")
         self.password = cfg.get("password")
         self.domain = cfg.get("domain") or ""
+        try:
+            self.port = int(cfg.get("port") or 445)
+        except (TypeError, ValueError):
+            self.port = 445
         self.reconnected = False
 
     def _full_user(self):
         return f"{self.domain}\\{self.username}" if self.domain else self.username
 
     def _register(self):
-        smbclient.register_session(self.server, username=self._full_user(), password=self.password)
+        smbclient.register_session(
+            self.server, username=self._full_user(), password=self.password, port=self.port
+        )
 
     def _unc(self, path: str) -> str:
         base = f"\\\\{self.server}\\{self.share}"
