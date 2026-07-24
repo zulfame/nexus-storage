@@ -160,7 +160,7 @@ export default function Files() {
               key={s.id}
               onClick={() => setActive(s)}
               data-testid={`switch-storage-${s.id}`}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-sm text-sm text-left transition-colors border ${
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-colors border ${
                 active?.id === s.id
                   ? "border-primary bg-[#00e5ff11] text-primary"
                   : "border-transparent text-gray-400 hover:text-white hover:bg-[#161616]"
@@ -168,7 +168,15 @@ export default function Files() {
             >
               {s.type === "s3" ? <Cloud size={16} /> : <Server size={16} />}
               <span className="flex-1 truncate">{s.name}</span>
-              <span className="text-[10px] font-mono uppercase opacity-60">{s.permission?.[0]}</span>
+              <span
+                className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded"
+                style={{
+                  background: s.permission === "write" ? "#34d39922" : "#00e5ff22",
+                  color: s.permission === "write" ? "#34d399" : "#00e5ff",
+                }}
+              >
+                {s.permission}
+              </span>
             </button>
           ))}
         </div>
@@ -206,7 +214,7 @@ export default function Files() {
                   <button
                     onClick={() => setNewFolder(true)}
                     data-testid="new-folder-button"
-                    className="flex items-center gap-1.5 text-sm font-medium border border-border px-3 py-2 rounded-sm hover:border-primary hover:text-primary transition-colors"
+                    className="flex items-center gap-1.5 text-sm font-medium border border-border px-3 py-2 rounded-xl hover:border-primary hover:text-primary transition-colors"
                   >
                     <FolderPlus size={15} /> Folder
                   </button>
@@ -214,7 +222,7 @@ export default function Files() {
                     onClick={() => fileInput.current?.click()}
                     disabled={uploading}
                     data-testid="upload-file-button"
-                    className="flex items-center gap-1.5 bg-primary text-black font-semibold text-sm px-4 py-2 rounded-sm hover:bg-[#00b3cc] transition-colors disabled:opacity-60"
+                    className="flex items-center gap-1.5 bg-primary text-black font-semibold text-sm px-4 py-2 rounded-xl hover:bg-[#00b3cc] transition-colors disabled:opacity-60"
                   >
                     {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
                     Upload
@@ -224,7 +232,7 @@ export default function Files() {
               )}
             </div>
 
-            <div className="border border-border rounded-sm overflow-hidden">
+            <div className="border border-border rounded-xl overflow-hidden">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-[#0d0d0d] text-left">
@@ -277,7 +285,7 @@ export default function Files() {
                                 onClick={() => download(item)}
                                 data-testid={`download-${item.name}`}
                                 aria-label="Download"
-                                className="p-1.5 border border-border rounded-sm hover:text-primary hover:border-primary transition-colors"
+                                className="p-1.5 border border-border rounded-xl hover:text-primary hover:border-primary transition-colors"
                               >
                                 <Download size={14} />
                               </button>
@@ -287,7 +295,7 @@ export default function Files() {
                                 onClick={() => remove(item)}
                                 data-testid={`delete-file-${item.name}`}
                                 aria-label="Delete"
-                                className="p-1.5 border border-border rounded-sm hover:text-destructive hover:border-destructive transition-colors"
+                                className="p-1.5 border border-border rounded-xl hover:text-destructive hover:border-destructive transition-colors"
                               >
                                 <Trash2 size={14} />
                               </button>
@@ -306,7 +314,7 @@ export default function Files() {
 
       {newFolder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#121212] border border-border rounded-sm w-full max-w-sm" data-testid="folder-dialog">
+          <div className="bg-[#121212] border border-border rounded-xl w-full max-w-sm" data-testid="folder-dialog">
             <div className="p-6 border-b border-border">
               <h3 className="font-display font-bold text-xl tracking-tight">New Folder</h3>
             </div>
@@ -319,12 +327,12 @@ export default function Files() {
                 onKeyDown={(e) => e.key === "Enter" && createFolder()}
                 data-testid="folder-name-input"
                 placeholder="new-folder"
-                className="w-full bg-[#0d0d0d] border border-border rounded-sm px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full bg-[#0d0d0d] border border-border rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
               />
             </div>
             <div className="p-6 border-t border-border flex justify-end gap-2">
-              <button onClick={() => setNewFolder(false)} className="text-sm font-medium px-4 py-2 rounded-sm text-gray-400 hover:text-white">Cancel</button>
-              <button onClick={createFolder} data-testid="create-folder-button" className="bg-primary text-black font-semibold text-sm px-5 py-2 rounded-sm hover:bg-[#00b3cc] transition-colors">Create</button>
+              <button onClick={() => setNewFolder(false)} className="text-sm font-medium px-4 py-2 rounded-xl text-gray-400 hover:text-white">Cancel</button>
+              <button onClick={createFolder} data-testid="create-folder-button" className="bg-primary text-black font-semibold text-sm px-5 py-2 rounded-xl hover:bg-[#00b3cc] transition-colors">Create</button>
             </div>
           </div>
         </div>

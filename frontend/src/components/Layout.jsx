@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
-import { LayoutDashboard, HardDrive, Users, FolderOpen, LogOut, Database } from "lucide-react";
+import { LayoutDashboard, HardDrive, Users, FolderOpen, LogOut, Database, ScrollText } from "lucide-react";
 
 const navBase =
   "flex items-center gap-3 px-4 py-2.5 text-sm font-medium transition-colors border-l-2";
@@ -35,7 +35,7 @@ export default function Layout() {
       <aside className="w-64 shrink-0 border-r border-border bg-[#0d0d0d] flex flex-col fixed h-screen">
         <div className="px-5 py-6 border-b border-border">
           <div className="flex items-center gap-2.5">
-            <div className="h-8 w-8 bg-primary flex items-center justify-center rounded-sm">
+            <div className="h-8 w-8 bg-primary flex items-center justify-center rounded-xl">
               <Database size={18} className="text-black" strokeWidth={2.5} />
             </div>
             <div>
@@ -54,8 +54,9 @@ export default function Layout() {
           <Item to="/files" icon={FolderOpen} label="File Browser" testid="nav-files" />
           {isAdmin && (
             <>
-              <Item to="/storages" icon={HardDrive} label="Storages" testid="nav-storages" />
-              <Item to="/users" icon={Users} label="Users" testid="nav-users" />
+              <Item to="/storages" icon={HardDrive} label="List Storage" testid="nav-storages" />
+              <Item to="/users" icon={Users} label="Manage User" testid="nav-users" />
+              <Item to="/logs" icon={ScrollText} label="Logs Activity" testid="nav-logs" />
             </>
           )}
         </nav>
@@ -73,7 +74,7 @@ export default function Layout() {
               navigate("/login");
             }}
             data-testid="logout-button"
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-300 border border-border hover:border-destructive hover:text-destructive transition-colors rounded-sm"
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm font-medium text-gray-300 border border-border hover:border-destructive hover:text-destructive transition-colors rounded-xl"
           >
             <LogOut size={16} /> Sign out
           </button>

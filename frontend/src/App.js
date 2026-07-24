@@ -8,6 +8,7 @@ import Dashboard from "@/pages/Dashboard";
 import Storages from "@/pages/Storages";
 import Users from "@/pages/Users";
 import Files from "@/pages/Files";
+import Logs from "@/pages/Logs";
 
 function ProtectedRoute({ children, adminOnly }) {
   const { user, loading } = useAuth();
@@ -58,6 +59,14 @@ function AppRoutes() {
           }
         />
         <Route path="files" element={<Files />} />
+        <Route
+          path="logs"
+          element={
+            <ProtectedRoute adminOnly>
+              <Logs />
+            </ProtectedRoute>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -71,7 +80,7 @@ function App() {
         <BrowserRouter>
           <AppRoutes />
         </BrowserRouter>
-        <Toaster position="top-right" theme="dark" />
+        <Toaster position="bottom-right" theme="dark" />
       </AuthProvider>
     </div>
   );

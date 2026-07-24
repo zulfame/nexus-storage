@@ -1,5 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@500;700&display=swap");
-@import url("https://api.fontshare.com/v2/css?f[]=cabinet-grotesk@500,700,800,900&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap");
 
 @tailwind base;
 @tailwind components;
@@ -9,13 +8,13 @@ body {
   margin: 0;
   background-color: var(--bg);
   color: #ffffff;
-  font-family: "IBM Plex Sans", sans-serif;
+  font-family: "Poppins", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
 .font-display {
-  font-family: "Cabinet Grotesk", "Space Grotesk", sans-serif;
+  font-family: "Poppins", sans-serif;
 }
 
 .font-mono {
@@ -67,7 +66,7 @@ body {
     --border: 0 0% 16.5%;
     --input: 0 0% 16.5%;
     --ring: 187 100% 50%;
-    --radius: 0.25rem;
+    --radius: 0.75rem;
   }
 }
 

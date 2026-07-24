@@ -133,6 +133,21 @@ def decrypt_config(doc: dict) -> dict:
     return cfg
 
 
+async def log_activity(user: dict, action: str, storage_doc: dict, path: str, detail: str = ""):
+    await db.activity_logs.insert_one(
+        {
+            "user_email": user.get("email"),
+            "action": action,
+            "storage_id": str(storage_doc["_id"]),
+            "storage_name": storage_doc.get("name"),
+            "storage_type": storage_doc.get("type"),
+            "path": path,
+            "detail": detail,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
 def user_permission_for(user: dict, storage_id: str) -> Optional[str]:
     if user.get("role") == "admin":
         return "write"
@@ -340,14 +355,14 @@ async def _resolve_backend(storage_id: str, user: dict, need_write: bool):
         raise HTTPException(status_code=403, detail="Read-only access")
     doc = await get_storage_or_404(storage_id)
     try:
-        return build_backend(doc["type"], decrypt_config(doc))
+        return build_backend(doc["type"], decrypt_config(doc)), doc
     except StorageError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
 @api_router.get("/storages/{storage_id}/files")
 async def list_files(storage_id: str, path: str = "", user: dict = Depends(get_current_user)):
-    backend = await _resolve_backend(storage_id, user, need_write=False)
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=False)
     try:
         return {"path": path, "items": backend.list(path)}
     except Exception as e:
@@ -361,17 +376,20 @@ async def upload_file(
     file: UploadFile = File(...),
     user: dict = Depends(get_current_user),
 ):
-    backend = await _resolve_backend(storage_id, user, need_write=True)
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
     try:
         key = backend.upload(path, file.file, file.filename)
+        await log_activity(user, "upload", sdoc, key)
         return {"status": "uploaded", "path": key}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Upload failed: {e}")
 
 
 @api_router.get("/storages/{storage_id}/files/download")
 async def download_file(storage_id: str, path: str, user: dict = Depends(get_current_user)):
-    backend = await _resolve_backend(storage_id, user, need_write=False)
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=False)
     try:
         stream, size = backend.download(path)
     except Exception as e:
@@ -385,22 +403,46 @@ async def download_file(storage_id: str, path: str, user: dict = Depends(get_cur
 async def delete_file(
     storage_id: str, path: str, is_dir: bool = False, user: dict = Depends(get_current_user)
 ):
-    backend = await _resolve_backend(storage_id, user, need_write=True)
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
     try:
         backend.delete(path, is_dir=is_dir)
+        await log_activity(user, "delete_folder" if is_dir else "delete", sdoc, path)
         return {"status": "deleted"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Delete failed: {e}")
 
 
 @api_router.post("/storages/{storage_id}/files/folder")
 async def create_folder(storage_id: str, body: FolderBody, user: dict = Depends(get_current_user)):
-    backend = await _resolve_backend(storage_id, user, need_write=True)
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
     try:
         backend.mkdir(body.path, body.name)
+        target = f"{body.path.rstrip('/')}/{body.name}" if body.path else body.name
+        await log_activity(user, "create_folder", sdoc, target)
         return {"status": "created"}
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Create folder failed: {e}")
+
+
+@api_router.get("/logs")
+async def list_logs(admin: dict = Depends(require_admin)):
+    logs = await db.activity_logs.find().sort("timestamp", -1).to_list(500)
+    return [
+        {
+            "id": str(l["_id"]),
+            "user_email": l.get("user_email"),
+            "action": l.get("action"),
+            "storage_name": l.get("storage_name"),
+            "storage_type": l.get("storage_type"),
+            "path": l.get("path"),
+            "timestamp": l.get("timestamp"),
+        }
+        for l in logs
+    ]
 
 
 # ---------------------------------------------------------------- dashboard

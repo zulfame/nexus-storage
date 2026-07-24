@@ -6,7 +6,7 @@ function Stat({ label, value, icon: Icon, accent, testid }) {
   return (
     <div
       data-testid={testid}
-      className="bg-[#121212] border border-border rounded-sm p-6 relative overflow-hidden"
+      className="bg-[#121212] border border-border rounded-xl p-6 relative overflow-hidden"
       style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}
     >
       <div className="flex items-start justify-between">
@@ -15,7 +15,7 @@ function Stat({ label, value, icon: Icon, accent, testid }) {
           <div className="font-mono font-bold text-4xl tracking-tight">{value}</div>
         </div>
         <div
-          className="h-10 w-10 flex items-center justify-center rounded-sm"
+          className="h-10 w-10 flex items-center justify-center rounded-xl"
           style={{ background: accent + "22", color: accent }}
         >
           <Icon size={20} />
@@ -35,7 +35,7 @@ export default function Dashboard() {
   const s = stats || {};
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-8">
       <div className="overline mb-2">Overview</div>
       <h1 className="font-display font-bold text-4xl tracking-tight mb-8">Dashboard</h1>
 
@@ -46,7 +46,7 @@ export default function Dashboard() {
         <Stat label="Users" value={s.total_users ?? "—"} icon={Users} accent="#a78bfa" testid="stat-users" />
       </div>
 
-      <div className="mt-10 bg-[#121212] border border-border rounded-sm p-6">
+      <div className="mt-10 bg-[#121212] border border-border rounded-xl p-6">
         <div className="flex items-center gap-3 mb-4">
           <ShieldCheck size={20} className="text-primary" />
           <h3 className="font-display font-semibold text-xl tracking-tight">Getting Started</h3>

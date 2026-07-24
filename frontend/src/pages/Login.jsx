@@ -50,7 +50,7 @@ export default function Login() {
       <div className="w-full lg:w-[480px] flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
           <div className="flex items-center gap-2.5 mb-10">
-            <div className="h-9 w-9 bg-primary flex items-center justify-center rounded-sm">
+            <div className="h-9 w-9 bg-primary flex items-center justify-center rounded-xl">
               <Database size={20} className="text-black" strokeWidth={2.5} />
             </div>
             <span className="font-display font-bold text-xl tracking-tight">NEXUS STORAGE</span>
@@ -69,7 +69,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 data-testid="login-email-input"
                 placeholder="admin@example.com"
-                className="w-full bg-[#121212] border border-border rounded-sm px-3 py-2.5 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full bg-[#121212] border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
               />
             </div>
             <div>
@@ -81,14 +81,14 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 data-testid="login-password-input"
                 placeholder="••••••••"
-                className="w-full bg-[#121212] border border-border rounded-sm px-3 py-2.5 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full bg-[#121212] border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
               data-testid="login-submit-button"
-              className="w-full bg-primary text-black font-semibold text-sm py-2.5 rounded-sm hover:bg-[#00b3cc] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+              className="w-full bg-primary text-black font-semibold text-sm py-2.5 rounded-xl hover:bg-[#00b3cc] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
             >
               {loading && <Loader2 size={16} className="animate-spin" />}
               {loading ? "Authenticating…" : "Sign in"}

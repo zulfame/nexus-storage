@@ -30,7 +30,7 @@ function Field({ label, value, onChange, placeholder, type = "text", testid }) {
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         data-testid={testid}
-        className="w-full bg-[#0d0d0d] border border-border rounded-sm px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+        className="w-full bg-[#0d0d0d] border border-border rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
       />
     </div>
   );
@@ -129,23 +129,23 @@ export default function Storages() {
   };
 
   return (
-    <div className="p-8 max-w-6xl">
+    <div className="p-8">
       <div className="flex items-end justify-between mb-8">
         <div>
           <div className="overline mb-2">Connections</div>
-          <h1 className="font-display font-bold text-4xl tracking-tight">Storages</h1>
+          <h1 className="font-display font-bold text-4xl tracking-tight">List Storage</h1>
         </div>
         <button
           onClick={openNew}
           data-testid="add-storage-button"
-          className="flex items-center gap-2 bg-primary text-black font-semibold text-sm px-4 py-2.5 rounded-sm hover:bg-[#00b3cc] transition-colors"
+          className="flex items-center gap-2 bg-primary text-black font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-[#00b3cc] transition-colors"
         >
           <Plus size={16} /> Add Storage
         </button>
       </div>
 
       {storages.length === 0 ? (
-        <div className="border border-dashed border-border rounded-sm p-16 text-center text-gray-500">
+        <div className="border border-dashed border-border rounded-xl p-16 text-center text-gray-500">
           No storages yet. Add your first S3 or Samba connection.
         </div>
       ) : (
@@ -154,11 +154,11 @@ export default function Storages() {
             <div
               key={s.id}
               data-testid={`storage-card-${s.id}`}
-              className="bg-[#121212] border border-border rounded-sm p-5 hover:border-[#3a3a3a] transition-colors"
+              className="bg-[#121212] border border-border rounded-xl p-5 hover:border-[#3a3a3a] transition-colors"
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 flex items-center justify-center rounded-sm bg-[#1a1a1a] text-primary">
+                  <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-[#1a1a1a] text-primary">
                     {s.type === "s3" ? <Cloud size={20} /> : <Server size={20} />}
                   </div>
                   <div>
@@ -187,7 +187,7 @@ export default function Storages() {
                     r.data.success ? toast.success(r.data.message) : toast.error(r.data.message);
                   }}
                   data-testid={`test-storage-${s.id}`}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-border py-1.5 rounded-sm hover:border-primary hover:text-primary transition-colors"
+                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-border py-1.5 rounded-xl hover:border-primary hover:text-primary transition-colors"
                 >
                   <Plug size={14} /> Test
                 </button>
@@ -195,7 +195,7 @@ export default function Storages() {
                   onClick={() => openEdit(s)}
                   data-testid={`edit-storage-${s.id}`}
                   aria-label="Edit storage"
-                  className="p-1.5 border border-border rounded-sm hover:text-primary hover:border-primary transition-colors"
+                  className="p-1.5 border border-border rounded-xl hover:text-primary hover:border-primary transition-colors"
                 >
                   <Pencil size={14} />
                 </button>
@@ -203,7 +203,7 @@ export default function Storages() {
                   onClick={() => remove(s)}
                   data-testid={`delete-storage-${s.id}`}
                   aria-label="Delete storage"
-                  className="p-1.5 border border-border rounded-sm hover:text-destructive hover:border-destructive transition-colors"
+                  className="p-1.5 border border-border rounded-xl hover:text-destructive hover:border-destructive transition-colors"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -215,7 +215,7 @@ export default function Storages() {
 
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#121212] border border-border rounded-sm w-full max-w-lg max-h-[90vh] overflow-y-auto" data-testid="storage-dialog">
+          <div className="bg-[#121212] border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" data-testid="storage-dialog">
             <div className="p-6 border-b border-border">
               <h3 className="font-display font-bold text-xl tracking-tight">
                 {editId ? "Edit Storage" : "Add Storage"}
@@ -231,7 +231,7 @@ export default function Storages() {
                       key={t}
                       onClick={() => setForm((f) => ({ ...f, type: t }))}
                       data-testid={`storage-type-${t}`}
-                      className={`flex-1 py-2 text-sm font-medium rounded-sm border transition-colors ${
+                      className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-colors ${
                         form.type === t
                           ? "border-primary text-primary bg-[#00e5ff11]"
                           : "border-border text-gray-400 hover:text-white"
@@ -266,7 +266,7 @@ export default function Storages() {
                 onClick={test}
                 disabled={testing}
                 data-testid="test-connection-button"
-                className="flex items-center gap-1.5 text-sm font-medium border border-border px-4 py-2 rounded-sm hover:border-primary hover:text-primary transition-colors disabled:opacity-60"
+                className="flex items-center gap-1.5 text-sm font-medium border border-border px-4 py-2 rounded-xl hover:border-primary hover:text-primary transition-colors disabled:opacity-60"
               >
                 {testing ? <Loader2 size={15} className="animate-spin" /> : <Plug size={15} />} Test
               </button>
@@ -274,7 +274,7 @@ export default function Storages() {
               <button
                 onClick={() => setOpen(false)}
                 data-testid="cancel-storage-button"
-                className="text-sm font-medium px-4 py-2 rounded-sm text-gray-400 hover:text-white transition-colors"
+                className="text-sm font-medium px-4 py-2 rounded-xl text-gray-400 hover:text-white transition-colors"
               >
                 Cancel
               </button>
@@ -282,7 +282,7 @@ export default function Storages() {
                 onClick={save}
                 disabled={saving}
                 data-testid="save-storage-button"
-                className="flex items-center gap-1.5 bg-primary text-black font-semibold text-sm px-5 py-2 rounded-sm hover:bg-[#00b3cc] transition-colors disabled:opacity-60"
+                className="flex items-center gap-1.5 bg-primary text-black font-semibold text-sm px-5 py-2 rounded-xl hover:bg-[#00b3cc] transition-colors disabled:opacity-60"
               >
                 {saving && <Loader2 size={15} className="animate-spin" />}
                 {editId ? "Save" : "Add"}

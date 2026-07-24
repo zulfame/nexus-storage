@@ -21,11 +21,19 @@ class S3Backend:
             aws_secret_access_key=cfg.get("secret_key"),
             region_name=cfg.get("region") or "us-east-1",
         )
+        boto_config = BotoConfig(
+            connect_timeout=10, read_timeout=20, retries={"max_attempts": 2}
+        )
         if cfg.get("endpoint"):
             client_kwargs["endpoint_url"] = cfg["endpoint"]
-            client_kwargs["config"] = BotoConfig(
-                signature_version="s3v4", s3={"addressing_style": "path"}
+            boto_config = BotoConfig(
+                signature_version="s3v4",
+                s3={"addressing_style": "path"},
+                connect_timeout=10,
+                read_timeout=20,
+                retries={"max_attempts": 2},
             )
+        client_kwargs["config"] = boto_config
         self.bucket = cfg["bucket"]
         self.client = boto3.client("s3", **client_kwargs)
 

@@ -316,3 +316,34 @@ class TestAccessAndPermissions:
         finally:
             _cleanup_storage(h, sid)
             _cleanup_user(h, uid)
+
+
+
+# ============ ACTIVITY LOGS ============
+class TestLogs:
+    def test_logs_requires_auth(self):
+        r = requests.get(f"{API}/logs")
+        assert r.status_code == 401
+
+    def test_logs_admin_only(self):
+        h = _admin_headers()
+        email = f"test_logs_{uuid.uuid4().hex[:8]}@example.com"
+        pw = "pw12345"
+        u = _create_user(h, email, pw)
+        try:
+            uh = _login(email, pw)
+            r = requests.get(f"{API}/logs", headers=uh)
+            assert r.status_code == 403
+        finally:
+            _cleanup_user(h, u["id"])
+
+    def test_logs_admin_returns_array(self):
+        h = _admin_headers()
+        r = requests.get(f"{API}/logs", headers=h)
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        # Validate schema on any existing entries
+        for entry in data:
+            for k in ("id", "user_email", "action", "storage_name", "path", "timestamp"):
+                assert k in entry, f"log entry missing key {k}: {entry}"
