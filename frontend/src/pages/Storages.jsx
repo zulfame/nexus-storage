@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
-import { Cloud, Server, Plus, Trash2, Pencil, Plug, Loader2 } from "lucide-react";
+import { Cloud, Server, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen } from "lucide-react";
 
 const empty = {
   name: "",
@@ -132,7 +132,35 @@ export default function Storages() {
         </button>
       </PageHeader>
 
-      <div className="p-8">
+      <div className="p-4 sm:p-8">
+        <div className="mb-6 rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-6 sm:p-8 shadow-sm" data-testid="getting-started">
+          <div className="flex flex-col sm:flex-row items-start gap-5">
+            <div className="h-12 w-12 rounded-xl bg-primary text-white flex items-center justify-center shrink-0 shadow-sm">
+              <Rocket size={24} />
+            </div>
+            <div className="flex-1 w-full">
+              <h3 className="font-display font-bold text-xl text-gray-900">Getting Started</h3>
+              <p className="text-sm text-gray-600 mt-1">Connect and manage your storage in three quick steps.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
+                {[
+                  { n: 1, icon: Plug, title: "Add a connection", desc: "Create an S3 or Samba storage and test it." },
+                  { n: 2, icon: KeyRound, title: "Grant access", desc: "Assign users read or write per storage." },
+                  { n: 3, icon: FolderOpen, title: "Browse files", desc: "Upload, download and organize your files." },
+                ].map((s) => (
+                  <div key={s.n} className="bg-white rounded-xl border border-blue-100 p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="h-6 w-6 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">{s.n}</span>
+                      <s.icon size={16} className="text-blue-600" />
+                    </div>
+                    <div className="text-sm font-semibold text-gray-900">{s.title}</div>
+                    <div className="text-xs text-gray-500 mt-0.5">{s.desc}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
         {storages.length === 0 ? (
           <div className="border border-dashed border-gray-300 rounded-2xl p-16 text-center text-gray-400 bg-white">
             No storages yet. Add your first S3 or Samba connection.

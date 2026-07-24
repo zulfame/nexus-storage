@@ -9,6 +9,8 @@ import Storages from "@/pages/Storages";
 import Users from "@/pages/Users";
 import Files from "@/pages/Files";
 import Logs from "@/pages/Logs";
+import ManageApp from "@/pages/ManageApp";
+import { SettingsProvider } from "@/context/SettingsContext";
 
 function ProtectedRoute({ children, adminOnly }) {
   const { user, loading } = useAuth();
@@ -67,6 +69,14 @@ function AppRoutes() {
             </ProtectedRoute>
           }
         />
+        <Route
+          path="settings"
+          element={
+            <ProtectedRoute adminOnly>
+              <ManageApp />
+            </ProtectedRoute>
+          }
+        />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -76,12 +86,14 @@ function AppRoutes() {
 function App() {
   return (
     <div className="App">
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-        <Toaster position="bottom-right" theme="dark" />
-      </AuthProvider>
+      <SettingsProvider>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+          <Toaster position="bottom-right" theme="dark" />
+        </AuthProvider>
+      </SettingsProvider>
     </div>
   );
 }

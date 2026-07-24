@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useSettings } from "@/context/SettingsContext";
 import {
   LayoutDashboard,
   HardDrive,
@@ -9,6 +10,7 @@ import {
   LogOut,
   Database,
   ScrollText,
+  SlidersHorizontal,
   Menu,
   X,
 } from "lucide-react";
@@ -39,20 +41,27 @@ function Item({ to, icon: Icon, label, testid, end, onNavigate }) {
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { settings } = useSettings();
   const navigate = useNavigate();
   const isAdmin = user?.role === "admin";
   const [open, setOpen] = useState(false);
   const close = () => setOpen(false);
+  const appName = settings.app_name || "Nexus";
+  const logo = settings.logo_url;
 
   return (
     <div className="min-h-screen bg-[#f6f8fc] text-gray-900">
       {/* Mobile top bar */}
       <div className="lg:hidden sticky top-0 z-30 flex items-center justify-between bg-white border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <div className="h-8 w-8 bg-primary flex items-center justify-center rounded-xl">
-            <Database size={16} className="text-white" strokeWidth={2.5} />
-          </div>
-          <span className="font-display font-bold text-base tracking-tight">NEXUS</span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          {logo ? (
+            <img src={logo} alt="logo" className="h-8 w-8 rounded-xl object-cover" />
+          ) : (
+            <div className="h-8 w-8 bg-primary flex items-center justify-center rounded-xl">
+              <Database size={16} className="text-white" strokeWidth={2.5} />
+            </div>
+          )}
+          <span className="font-display font-bold text-base tracking-tight truncate">{appName}</span>
         </div>
         <button
           onClick={() => setOpen(true)}
@@ -81,15 +90,19 @@ export default function Layout() {
         data-testid="sidebar"
       >
         <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 bg-primary flex items-center justify-center rounded-xl shadow-sm">
-              <Database size={18} className="text-white" strokeWidth={2.5} />
-            </div>
-            <div>
-              <div className="font-display font-bold text-lg leading-none tracking-tight text-gray-900">
-                NEXUS
+          <div className="flex items-center gap-2.5 min-w-0">
+            {logo ? (
+              <img src={logo} alt="logo" className="h-9 w-9 rounded-xl object-cover shadow-sm" />
+            ) : (
+              <div className="h-9 w-9 bg-primary flex items-center justify-center rounded-xl shadow-sm">
+                <Database size={18} className="text-white" strokeWidth={2.5} />
               </div>
-              <div className="overline mt-1">Storage Manager</div>
+            )}
+            <div className="min-w-0">
+              <div className="font-display font-bold text-base leading-tight tracking-tight text-gray-900 truncate">
+                {appName}
+              </div>
+              <div className="overline mt-0.5">Storage Manager</div>
             </div>
           </div>
           <button onClick={close} className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:bg-gray-100" aria-label="Close menu">
@@ -103,8 +116,9 @@ export default function Layout() {
           {isAdmin && (
             <>
               <Item to="/storages" icon={HardDrive} label="List Storage" testid="nav-storages" onNavigate={close} />
-              <Item to="/users" icon={Users} label="Manage User" testid="nav-users" onNavigate={close} />
               <Item to="/logs" icon={ScrollText} label="Logs Activity" testid="nav-logs" onNavigate={close} />
+              <Item to="/settings" icon={SlidersHorizontal} label="Manage App" testid="nav-manage-app" onNavigate={close} />
+              <Item to="/users" icon={Users} label="Manage User" testid="nav-users" onNavigate={close} />
             </>
           )}
         </nav>

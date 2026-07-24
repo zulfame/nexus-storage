@@ -337,16 +337,128 @@ class TestLogs:
         finally:
             _cleanup_user(h, u["id"])
 
-    def test_logs_admin_returns_array(self):
+    def test_logs_admin_returns_paged_object(self):
         h = _admin_headers()
         r = requests.get(f"{API}/logs", headers=h)
         assert r.status_code == 200
         data = r.json()
-        assert isinstance(data, list)
-        # Validate schema on any existing entries
-        for entry in data:
+        # New shape: {items, total, counts}
+        assert isinstance(data, dict)
+        assert "items" in data and isinstance(data["items"], list)
+        assert "total" in data and isinstance(data["total"], int)
+        assert "counts" in data and isinstance(data["counts"], dict)
+        for k in ("all", "file", "conn", "reconnect"):
+            assert k in data["counts"]
+        # default limit 25
+        assert len(data["items"]) <= 25
+        for entry in data["items"]:
             for k in ("id", "user_email", "action", "storage_name", "path", "timestamp", "detail"):
                 assert k in entry, f"log entry missing key {k}: {entry}"
+
+    def test_logs_pagination_skip_limit(self):
+        h = _admin_headers()
+        r1 = requests.get(f"{API}/logs?skip=0&limit=5", headers=h)
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert len(d1["items"]) <= 5
+        if d1["total"] > 5:
+            r2 = requests.get(f"{API}/logs?skip=5&limit=5", headers=h)
+            assert r2.status_code == 200
+            d2 = r2.json()
+            ids1 = {i["id"] for i in d1["items"]}
+            ids2 = {i["id"] for i in d2["items"]}
+            assert ids1.isdisjoint(ids2), "pagination returned overlapping ids"
+
+    def test_logs_category_filter(self):
+        h = _admin_headers()
+        r_all = requests.get(f"{API}/logs?category=all&limit=100", headers=h).json()
+        r_file = requests.get(f"{API}/logs?category=file&limit=100", headers=h).json()
+        r_conn = requests.get(f"{API}/logs?category=conn&limit=100", headers=h).json()
+        # NOTE: totals can drift by a few because parallel workers insert logs between calls.
+        # Instead validate that returned items respect the filter and totals sum ~== all total.
+        assert abs((r_file["total"] + r_conn["total"]) - r_all["total"]) <= 5
+        file_actions = {"upload", "delete", "delete_folder", "create_folder"}
+        for it in r_file["items"]:
+            assert it["action"] in file_actions
+        for it in r_conn["items"]:
+            assert it["action"] not in file_actions
+
+    def test_delete_logs_by_date_range_no_op(self):
+        """Delete with an old date range should not remove anything real."""
+        h = _admin_headers()
+        r = requests.delete(f"{API}/logs?start=2000-01-01&end=2000-01-02", headers=h)
+        assert r.status_code == 200
+        assert r.json().get("deleted") == 0
+
+    def test_delete_logs_requires_admin(self):
+        h = _admin_headers()
+        email = f"test_dellog_{uuid.uuid4().hex[:8]}@example.com"
+        pw = "pw12345"
+        u = _create_user(h, email, pw)
+        try:
+            uh = _login(email, pw)
+            r = requests.delete(f"{API}/logs?start=2000-01-01&end=2000-01-02", headers=uh)
+            assert r.status_code == 403
+        finally:
+            _cleanup_user(h, u["id"])
+
+
+# ============ APP SETTINGS ============
+class TestAppSettings:
+    def test_get_settings_public(self):
+        r = requests.get(f"{API}/settings")
+        assert r.status_code == 200
+        d = r.json()
+        for k in ("app_name", "tagline", "meta_description", "favicon_url", "logo_url", "primary_color"):
+            assert k in d
+
+    def test_put_settings_requires_admin(self):
+        r = requests.put(f"{API}/settings", json={"app_name": "X"})
+        assert r.status_code == 401
+        # non-admin
+        h = _admin_headers()
+        email = f"test_setu_{uuid.uuid4().hex[:8]}@example.com"
+        pw = "pw12345"
+        u = _create_user(h, email, pw)
+        try:
+            uh = _login(email, pw)
+            r = requests.put(f"{API}/settings", json={"app_name": "X"}, headers=uh)
+            assert r.status_code == 403
+        finally:
+            _cleanup_user(h, u["id"])
+
+    def test_put_settings_persists_and_restores(self):
+        h = _admin_headers()
+        # snapshot current
+        current = requests.get(f"{API}/settings").json()
+        try:
+            new_name = f"TEST_APP_{uuid.uuid4().hex[:6]}"
+            payload = {
+                "app_name": new_name,
+                "tagline": "Test tagline",
+                "meta_description": "Test meta",
+                "favicon_url": "",
+                "logo_url": "",
+                "primary_color": "#ff0000",
+            }
+            r = requests.put(f"{API}/settings", json=payload, headers=h)
+            assert r.status_code == 200
+            assert r.json()["app_name"] == new_name
+            # GET reflects update
+            r2 = requests.get(f"{API}/settings")
+            assert r2.json()["app_name"] == new_name
+            assert r2.json()["primary_color"] == "#ff0000"
+        finally:
+            # restore defaults per test-plan instructions
+            restore = {
+                "app_name": "Nexus Storage Manager",
+                "tagline": "All your storage, one clean workspace.",
+                "meta_description": "Manage S3 and Samba storage from one workspace, with per-user access control.",
+                "favicon_url": "",
+                "logo_url": "",
+                "primary_color": "#2563eb",
+            }
+            requests.put(f"{API}/settings", json=restore, headers=h)
 
 
 # ============ CONNECTION LIFECYCLE + NON-BLOCKING ============
@@ -377,10 +489,10 @@ class TestConnectionLifecycleLogs:
             assert r2.status_code == 200
 
             # Fetch logs and verify presence
-            r = requests.get(f"{API}/logs", headers=h)
+            r = requests.get(f"{API}/logs?limit=100", headers=h)
             assert r.status_code == 200
-            logs = r.json()
-            actions_for_sid = [l for l in logs if l.get("storage_name", "").startswith(name)]
+            logs = r.json()["items"]
+            actions_for_sid = [l for l in logs if (l.get("storage_name") or "").startswith(name)]
             action_set = {l["action"] for l in actions_for_sid}
             assert "storage_added" in action_set, f"missing storage_added: {action_set}"
             assert "storage_updated" in action_set, f"missing storage_updated: {action_set}"
@@ -391,24 +503,24 @@ class TestConnectionLifecycleLogs:
         finally:
             _cleanup_storage(h, sid)
         # After delete, verify storage_deleted logged
-        r = requests.get(f"{API}/logs", headers=h)
-        logs = r.json()
-        actions_for_sid = {l["action"] for l in logs if l.get("storage_name", "").startswith(name)}
+        r = requests.get(f"{API}/logs?limit=100", headers=h)
+        logs = r.json()["items"]
+        actions_for_sid = {l["action"] for l in logs if (l.get("storage_name") or "").startswith(name)}
         assert "storage_deleted" in actions_for_sid, f"missing storage_deleted: {actions_for_sid}"
 
     def test_no_spurious_reconnect_on_normal_list(self):
         """A failed list from bad creds should NOT create a reconnect log (since op raised)."""
         h = _admin_headers()
         # Snapshot reconnect count
-        r = requests.get(f"{API}/logs", headers=h)
-        before = sum(1 for l in r.json() if l["action"] == "reconnect")
+        r = requests.get(f"{API}/logs?limit=100", headers=h)
+        before = sum(1 for l in r.json()["items"] if l["action"] == "reconnect")
         # Create fake storage, list files (will fail with 400), ensure no reconnect log added
         s = _create_s3_storage(h, f"TEST_norec_{uuid.uuid4().hex[:6]}")
         sid = s["id"]
         try:
             requests.get(f"{API}/storages/{sid}/files", headers=h)
-            r = requests.get(f"{API}/logs", headers=h)
-            after = sum(1 for l in r.json() if l["action"] == "reconnect")
+            r = requests.get(f"{API}/logs?limit=100", headers=h)
+            after = sum(1 for l in r.json()["items"] if l["action"] == "reconnect")
             assert after == before, "spurious reconnect log created on failing op"
         finally:
             _cleanup_storage(h, sid)

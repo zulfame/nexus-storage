@@ -12,7 +12,7 @@ from typing import List, Optional
 import bcrypt
 import jwt
 from bson import ObjectId
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
 from starlette.concurrency import run_in_threadpool
@@ -207,6 +207,37 @@ class StorageBody(BaseModel):
 class FolderBody(BaseModel):
     path: str = ""
     name: str
+
+
+class SettingsBody(BaseModel):
+    app_name: str = ""
+    tagline: str = ""
+    meta_description: str = ""
+    favicon_url: str = ""
+    logo_url: str = ""
+    primary_color: str = ""
+
+
+DEFAULT_SETTINGS = {
+    "app_name": "Nexus Storage Manager",
+    "tagline": "All your storage, one clean workspace.",
+    "meta_description": "Manage S3 and Samba storage from one workspace, with per-user access control.",
+    "favicon_url": "",
+    "logo_url": "",
+    "primary_color": "#2563eb",
+}
+
+FILE_ACTIONS = ["upload", "delete", "delete_folder", "create_folder"]
+
+
+async def get_settings() -> dict:
+    doc = await db.settings.find_one({"_id": "app"})
+    merged = dict(DEFAULT_SETTINGS)
+    if doc:
+        for k, v in doc.items():
+            if k != "_id" and v not in (None, ""):
+                merged[k] = v
+    return merged
 
 
 # ---------------------------------------------------------------- auth routes
@@ -451,9 +482,21 @@ async def create_folder(storage_id: str, body: FolderBody, user: dict = Depends(
 
 
 @api_router.get("/logs")
-async def list_logs(admin: dict = Depends(require_admin)):
-    logs = await db.activity_logs.find().sort("timestamp", -1).to_list(500)
-    return [
+async def list_logs(
+    admin: dict = Depends(require_admin),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+    category: str = "all",
+):
+    if category == "file":
+        q = {"action": {"$in": FILE_ACTIONS}}
+    elif category == "conn":
+        q = {"action": {"$nin": FILE_ACTIONS}}
+    else:
+        q = {}
+    total = await db.activity_logs.count_documents(q)
+    logs = await db.activity_logs.find(q).sort("timestamp", -1).skip(skip).limit(limit).to_list(limit)
+    items = [
         {
             "id": str(l["_id"]),
             "user_email": l.get("user_email"),
@@ -466,6 +509,45 @@ async def list_logs(admin: dict = Depends(require_admin)):
         }
         for l in logs
     ]
+    all_count = await db.activity_logs.count_documents({})
+    file_count = await db.activity_logs.count_documents({"action": {"$in": FILE_ACTIONS}})
+    reconnect_count = await db.activity_logs.count_documents({"action": "reconnect"})
+    counts = {"all": all_count, "file": file_count, "conn": all_count - file_count, "reconnect": reconnect_count}
+    return {"items": items, "total": total, "counts": counts}
+
+
+@api_router.delete("/logs")
+async def delete_logs(
+    admin: dict = Depends(require_admin),
+    start: str = "",
+    end: str = "",
+):
+    if start or end:
+        ts = {}
+        if start:
+            ts["$gte"] = start
+        if end:
+            ts["$lte"] = end + "T23:59:59.999999+00:00"
+        q = {"timestamp": ts}
+    else:
+        q = {}
+    res = await db.activity_logs.delete_many(q)
+    return {"deleted": res.deleted_count}
+
+
+# ---------------------------------------------------------------- app settings
+@api_router.get("/settings")
+async def get_app_settings():
+    return await get_settings()
+
+
+@api_router.put("/settings")
+async def update_app_settings(body: SettingsBody, admin: dict = Depends(require_admin)):
+    data = body.model_dump()
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.settings.update_one({"_id": "app"}, {"$set": data}, upsert=True)
+    await log_activity(admin, "settings_updated", {"_id": "", "name": None, "type": None}, "", "Application settings updated")
+    return await get_settings()
 
 
 # ---------------------------------------------------------------- dashboard
@@ -530,6 +612,7 @@ async def seed_admin():
 async def on_startup():
     await db.users.create_index("email", unique=True)
     await db.activity_logs.create_index([("timestamp", -1)])
+    await db.activity_logs.create_index("action")
     await seed_admin()
 
 
