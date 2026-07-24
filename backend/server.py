@@ -601,28 +601,53 @@ app.add_middleware(
 )
 
 
+DEFAULT_ADMIN_EMAIL = "admin@example.com"
+DEFAULT_ADMIN_PASSWORD = "admin123"
+
+
+async def _create_admin(email: str, password: str):
+    await db.users.insert_one(
+        {
+            "email": email,
+            "password_hash": hash_password(password),
+            "name": "Administrator",
+            "role": "admin",
+            "access": [],
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+
+
 async def seed_admin():
-    admin_email = os.environ.get("ADMIN_EMAIL", "admin@example.com").lower()
-    admin_password = os.environ.get("ADMIN_PASSWORD", "admin123")
-    existing = await db.users.find_one({"email": admin_email})
-    if existing is None:
-        await db.users.insert_one(
-            {
-                "email": admin_email,
-                "password_hash": hash_password(admin_password),
-                "name": "Administrator",
-                "role": "admin",
-                "access": [],
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
+    # Treat empty strings (e.g. panel-injected empty env vars) as "not set".
+    admin_email = (os.environ.get("ADMIN_EMAIL") or "").strip().lower()
+    admin_password = os.environ.get("ADMIN_PASSWORD") or ""
+
+    if admin_email and admin_password:
+        existing = await db.users.find_one({"email": admin_email})
+        if existing is None:
+            await _create_admin(admin_email, admin_password)
+            logger.info("Seeded admin user %s", admin_email)
+        elif not verify_password(admin_password, existing["password_hash"]):
+            await db.users.update_one(
+                {"email": admin_email},
+                {"$set": {"password_hash": hash_password(admin_password), "role": "admin"}},
+            )
+            logger.info("Updated admin password for %s", admin_email)
+        return
+
+    # No admin env provided: only bootstrap a default admin on a fresh (empty) database
+    # so first login is always possible. Once any user exists, these vars are not needed.
+    if await db.users.count_documents({}) == 0:
+        await _create_admin(DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD)
+        logger.info(
+            "No ADMIN_EMAIL/ADMIN_PASSWORD set. Seeded default admin %s / %s "
+            "(set ADMIN_EMAIL & ADMIN_PASSWORD to customize).",
+            DEFAULT_ADMIN_EMAIL,
+            DEFAULT_ADMIN_PASSWORD,
         )
-        logger.info("Seeded admin user %s", admin_email)
-    elif not verify_password(admin_password, existing["password_hash"]):
-        await db.users.update_one(
-            {"email": admin_email},
-            {"$set": {"password_hash": hash_password(admin_password), "role": "admin"}},
-        )
-        logger.info("Updated admin password for %s", admin_email)
+    else:
+        logger.info("Admin env not set and users already exist; skipping admin seeding.")
 
 
 @app.on_event("startup")

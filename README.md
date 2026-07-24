@@ -45,13 +45,25 @@ frontend/   React app (all API calls use REACT_APP_BACKEND_URL + /api)
 | CORS_ORIGINS | Required | * | Comma-separated allowed CORS origins |
 | REACT_APP_BACKEND_URL | Required | - | Backend base URL used by the frontend (injected by panel) |
 | JWT_SECRET | Required | (auto by panel) | JWT signing key; also derives the credential encryption key |
-| ADMIN_EMAIL | Required | - | Initial admin email (seeded on startup) |
-| ADMIN_PASSWORD | Required | - | Initial admin password (seeded on startup) |
+| ADMIN_EMAIL | Optional | admin@example.com | Initial admin email. Seeded only on a fresh (empty) database. Not needed once any user exists. |
+| ADMIN_PASSWORD | Optional | admin123 | Initial admin password. Seeded only on a fresh (empty) database. Not needed once any user exists. |
 | LOCAL_STORAGE_DIR | Optional | /app/data | Persistent files/scratch folder (mounted volume) |
 | ACCESS_TOKEN_MINUTES | Optional | 1440 | JWT access token lifetime in minutes |
 
 All variables are read via `os.environ.get(...)`. Only the ones marked **Required** without a
-default will block deploy. Storage backend credentials (S3 keys, Samba passwords) are entered
+default will block deploy.
+
+> **First login / admin bootstrap:** On a fresh (empty) database the backend always seeds a
+> working admin so you can log in immediately:
+> - If `ADMIN_EMAIL` **and** `ADMIN_PASSWORD` are set, that account is created (and its password
+>   kept in sync on restart).
+> - If they are **empty or unset**, a default admin is seeded: **`admin@example.com` / `admin123`**
+>   (change the password from the in-app user menu after logging in).
+>
+> Once you have logged in and created/managed users in the database, `ADMIN_EMAIL` and
+> `ADMIN_PASSWORD` are **no longer needed** — the backend will not re-seed when users already exist.
+
+Storage backend credentials (S3 keys, Samba passwords) are entered
 through the UI and stored **encrypted** in MongoDB — they are not environment variables.
 
 ## Deployment Checklist
