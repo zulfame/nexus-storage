@@ -1,4 +1,5 @@
 import io
+import stat as stat_module
 import time
 from datetime import datetime, timezone
 
@@ -11,6 +12,7 @@ from botocore.exceptions import (
     ReadTimeoutError,
 )
 import smbclient
+import paramiko
 
 
 class StorageError(Exception):
@@ -23,8 +25,10 @@ def _norm(path: str) -> str:
 
 def _looks_like_conn_error(exc: Exception) -> bool:
     name = exc.__class__.__name__.lower()
-    keywords = ("connection", "timeout", "closed", "broken", "reset", "pipe", "transport", "negotiate", "unreachable")
-    return any(k in name for k in keywords)
+    text = str(exc).lower()
+    keywords = ("connection", "timeout", "closed", "broken", "reset", "pipe",
+                "transport", "negotiate", "unreachable", "eof", "socket", "dropped")
+    return any(k in name or k in text for k in keywords)
 
 
 class S3Backend:
@@ -258,6 +262,166 @@ class SambaBackend:
         self._attempt(lambda: smbclient.mkdir(self._unc(target)))
 
 
+class SFTPBackend:
+    def __init__(self, cfg: dict):
+        raw_host = (cfg.get("host") or "").strip()
+        for prefix in ("sftp://", "ssh://", "SFTP://", "SSH://"):
+            if raw_host.startswith(prefix):
+                raw_host = raw_host[len(prefix):]
+        raw_host = raw_host.strip("\\/").strip().replace("\\", "/").split("/")[0].strip()
+
+        port = cfg.get("port")
+        if ":" in raw_host and not raw_host.startswith("["):
+            h, _, p = raw_host.rpartition(":")
+            if p.isdigit():
+                raw_host = h
+                if not port:
+                    port = p
+
+        self.host = raw_host
+        try:
+            self.port = int(port or 2222)
+        except (TypeError, ValueError):
+            self.port = 2222
+        self.username = cfg.get("username")
+        self.password = cfg.get("password")
+        base_raw = (cfg.get("base_path") or "").strip()
+        self._base_absolute = base_raw.startswith("/")
+        self.base = base_raw.strip("/")
+        self.reconnected = False
+        self._client = None
+        self._sftp = None
+
+    def _connect(self):
+        self._close()
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client.connect(
+            hostname=self.host,
+            port=self.port,
+            username=self.username,
+            password=self.password,
+            timeout=15,
+            banner_timeout=15,
+            auth_timeout=15,
+            look_for_keys=False,
+            allow_agent=False,
+        )
+        self._client = client
+        self._sftp = client.open_sftp()
+        self._sftp.get_channel().settimeout(60)
+
+    def _close(self):
+        for obj in (self._sftp, self._client):
+            try:
+                if obj is not None:
+                    obj.close()
+            except Exception:
+                pass
+        self._sftp = None
+        self._client = None
+
+    def _remote(self, path: str) -> str:
+        p = _norm(path)
+        parts = [seg for seg in (self.base, p) if seg]
+        joined = "/".join(parts)
+        if self._base_absolute:
+            return "/" + joined if joined else "/"
+        return joined or "."
+
+    def _attempt(self, fn, tries=3):
+        last = None
+        for i in range(tries):
+            try:
+                if self._sftp is None or i > 0:
+                    if i > 0:
+                        self.reconnected = True
+                    self._connect()
+                return fn()
+            except Exception as e:
+                last = e
+                self._close()
+                if not _looks_like_conn_error(e):
+                    raise
+                time.sleep(0.4 * (i + 1))
+        raise last
+
+    def test(self) -> bool:
+        self._attempt(lambda: self._sftp.listdir(self._remote("")))
+        return True
+
+    def list(self, path: str):
+        rel = _norm(path)
+
+        def op():
+            items = []
+            for attr in self._sftp.listdir_attr(self._remote(path)):
+                name = attr.filename
+                if name in (".", ".."):
+                    continue
+                is_dir = stat_module.S_ISDIR(attr.st_mode)
+                full = f"{rel}/{name}" if rel else name
+                items.append({
+                    "name": name,
+                    "path": full,
+                    "is_dir": is_dir,
+                    "size": 0 if is_dir else (attr.st_size or 0),
+                    "modified": datetime.fromtimestamp(attr.st_mtime, timezone.utc).isoformat() if attr.st_mtime else None,
+                })
+            items.sort(key=lambda x: (not x["is_dir"], x["name"].lower()))
+            return items
+
+        return self._attempt(op)
+
+    def upload(self, path: str, fileobj, filename: str):
+        base = _norm(path)
+        target = f"{base}/{filename}" if base else filename
+
+        def op():
+            try:
+                fileobj.seek(0)
+            except Exception:
+                pass
+            self._sftp.putfo(fileobj, self._remote(target))
+
+        self._attempt(op)
+        return target
+
+    def download(self, path: str):
+        def op():
+            buf = io.BytesIO()
+            self._sftp.getfo(self._remote(path), buf)
+            buf.seek(0)
+            return buf
+
+        buf = self._attempt(op)
+        return buf, buf.getbuffer().nbytes
+
+    def delete(self, path: str, is_dir: bool = False):
+        if is_dir:
+            self._attempt(lambda: self._rmtree(path))
+        else:
+            self._attempt(lambda: self._sftp.remove(self._remote(path)))
+
+    def _rmtree(self, path: str):
+        rel = _norm(path)
+        for attr in self._sftp.listdir_attr(self._remote(path)):
+            name = attr.filename
+            if name in (".", ".."):
+                continue
+            child = f"{rel}/{name}" if rel else name
+            if stat_module.S_ISDIR(attr.st_mode):
+                self._rmtree(child)
+            else:
+                self._sftp.remove(self._remote(child))
+        self._sftp.rmdir(self._remote(path))
+
+    def mkdir(self, path: str, name: str):
+        base = _norm(path)
+        target = f"{base}/{name}" if base else name
+        self._attempt(lambda: self._sftp.mkdir(self._remote(target)))
+
+
 def humanize_storage_error(exc: Exception) -> str:
     s = str(exc)
     low = s.lower()
@@ -266,17 +430,22 @@ def humanize_storage_error(exc: Exception) -> str:
             return ("Host not found / unreachable. Check the IP or hostname "
                     "(each part must be 0-255, e.g. 192.168.2.8) and that the server is on.")
     if "timed out" in low or "timeout" in low:
-        return "Connection timed out. Check the port (SMB uses 445) and firewall/network reachability."
+        return "Connection timed out. Check the host, port and firewall/network reachability (SMB=445, SFTP often=2222)."
     if "refused" in low:
-        return "Connection refused. The port is closed on the server — SMB usually uses port 445."
-    if any(k in low for k in ("logon_failure", "access_denied", "access is denied", "authentication", "credential", "password")):
-        return "Authentication failed. Check the username, password and domain (often WORKGROUP)."
+        return "Connection refused. The port is closed on the server (SMB usually 445, SFTP often 2222). Enable the service on the NAS."
+    if "no authentication methods" in low or "authentication failed" in low or any(
+        k in low for k in ("logon_failure", "access_denied", "access is denied", "authentication", "credential")):
+        return "Authentication failed. Check the username and password (and domain for SMB, often WORKGROUP)."
     if "bad_network_name" in low or ("share" in low and "not found" in low):
         return "Share not found. Check the share name (the shared folder name, not a sub-path)."
+    if "no such file" in low or "not found" in low:
+        return "Path not found. Check the folder / base path exists on the server."
     if "nosuchbucket" in low or "does not exist" in low:
         return "Bucket/share not found. Check the name."
     if "signaturedoesnotmatch" in low or "invalidaccesskey" in low or "403" in low or "forbidden" in low:
         return "Access denied. Check the access key / secret (S3) or credentials."
+    if "permission denied" in low:
+        return "Permission denied. The user lacks access to this folder on the server."
     return s
 
 
@@ -285,4 +454,6 @@ def build_backend(storage_type: str, cfg: dict):
         return S3Backend(cfg)
     if storage_type == "samba":
         return SambaBackend(cfg)
+    if storage_type == "sftp":
+        return SFTPBackend(cfg)
     raise StorageError(f"Unknown storage type: {storage_type}")

@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 9 (both) validated the SFTP storage type end-to-end plus password eye-toggles across Login, Storages (S3/Samba/SFTP), Users (Add + Edit), and Change Password. Backend regression suite expanded from 47 -> 53 tests, all passing (added TestSFTP: live-server connect success, wrong-password failure, CRUD + no-password-leak in list, saved-storage /test success, /storages/{id}/config decrypts and returns password for edit prefill, /config requires admin (401/403), S3 secret_key round-trips through /config, bad-type still rejected while sftp accepted). Live SFTP server confirmed running on 127.0.0.1:2222 (sftptest/testpass123) via ss + paramiko. UI flow verified on the public REACT_APP_BACKEND_URL: (1) login-password-input-toggle flips type password<->text with value preserved; (2) Add Storage dialog shows S3/Samba/SFTP type buttons — clicking Samba sets samba-port-input='445', clicking SFTP sets sftp-port-input='2222'; SFTP form exposes sftp-host-input, sftp-port-input, sftp-username-input, sftp-password-input, sftp-basepath-input plus sftp-password-input-toggle (and same for s3-secret-key-input-toggle, samba-password-input-toggle); (3) created a live SFTP storage via the UI (name TEST_ui_sftp, 127.0.0.1:2222, sftptest/testpass123, empty base_path) — dialog Test showed 'Connection successful', save produced storage-card-<id>, card test-storage-<id> also showed success, opening /files/<id> loaded home dir listing without error; (4) edit-storage-<id> pre-fills host/port/username and, after clicking the eye toggle, reveals password='testpass123' (i.e. GET /api/storages/{id}/config was called and used to prefill secrets), and re-saving unchanged persists fine; (5) Users -> Add User: new-user-password + new-user-password-toggle both work (typed 'hello123', toggle reveals text); Edit User dialog: edit-user-password + edit-user-password-toggle work (typed 'peekme01', toggle reveals text); (6) Change Password dialog exposes cp-current, cp-new, cp-confirm and all three toggles. Cleaned up the created SFTP storage. Admin login admin@example.com/admin123 verified still valid.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Change Password dialog (UserMenu)", "issue": "At 1920x1080 the dialog is not vertically centered — the top of the dialog (the 'Current password' field + label) is clipped above the viewport. All toggles work, but users have to scroll the dialog itself to reach the current-password field. Likely missing max-h/overflow or an off-screen absolute positioning.", "selector": "cp-current, cp-current-toggle", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login page marketing side", "issues": ["The left panel still advertises only 'AWS S3, MiniO/Wasabi, Samba/SMB'. SFTP is not mentioned even though it is now a first-class storage type. Cosmetic — update copy."]},
+      {"screen": "Dashboard 'Storage Breakdown'", "issues": ["Now shows S3 / Samba / SFTP rows (good). No spacing issues; the SFTP count wires through /api/dashboard/stats sftp_count."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix the Change Password dialog vertical positioning so the 'Current password' field is not clipped above the viewport on 1920x1080 (add proper max-height + centering, or wrap dialog in a scrollable container like the Storage dialog uses).",
+    "Cosmetic: mention SFTP alongside S3 and Samba on the Login page marketing panel.",
+    "(Optional) storage_public returns config.port as-is; it may be int or string depending on how the client sent it. Consider normalizing to int at write-time so the SFTP/Samba edit prefill is always a stable type."
+  ],
+  "critical_code_review_comments": [
+    "server.py update_storage: when body.type differs from stored type and the new secret is empty, the code silently blanks the previously-stored secret (correct — different backend needs new creds — but there is no user-visible warning). Consider returning 400 when switching type and secret_key/password is empty, to prevent an accidental unauthenticated storage row.",
+    "SFTPBackend keeps self._client / self._sftp open across list/upload/download calls, but Files endpoints build a NEW backend object per request via _resolve_backend → build_backend. So the paramiko connection is created and never explicitly closed per request. Not leaking file descriptors long-term because the object is GC'd, but consider using a context manager or an explicit close after each op, especially since paramiko's SSHClient holds a socket + thread until finalized.",
+    "SFTPBackend._connect uses paramiko.AutoAddPolicy(): fine for a NAS on a private LAN but note the server key is not verified — no MITM protection. Acceptable for this app's scope; document in help text if desired.",
+    "Frontend Storages.jsx openEdit calls setForm twice (once with the public storage row, then again after /config resolves). If the user starts typing between the two setForms, keystrokes get overwritten. Consider awaiting /config BEFORE opening the dialog, or merging incoming config with the current form state instead of overwriting."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added class TestSFTP with 6 tests: live connect success, bad-password failure, CRUD + no-leak + saved test + /config decrypt + list files, /config auth guards (401/403), S3 /config round-trip, bad-type rejection regression)"
+  ],
+  "success_rate": {"backend": "100% (53/53 pytest)", "frontend": "100% functional; 1 minor UI positioning issue on Change Password dialog"},
+  "test_credentials": "admin@example.com / admin123 — verified still valid. Local SFTP: 127.0.0.1:2222 sftptest/testpass123 (running via sshd on port 2222 inside backend pod).",
+  "seed_data_creation": "Backend tests create/delete TEST_* storages, temp users, and temp admins in each test class — all cleaned up in finally blocks. UI flow created TEST_ui_sftp storage and deleted it at end of run. No residual TEST_ rows expected.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "SFTP is now a full storage type: backend classes SFTPBackend (paramiko) in storage_backends.py; server accepts type='sftp', encrypts config.password like samba, GET /api/storages/{id}/config returns decrypted config (admin-only). Frontend Storages page has storage-type-sftp button, sftp-host-input, sftp-port-input (defaults 2222), sftp-username-input, sftp-password-input (+ -toggle), sftp-basepath-input. All password/secret fields across the app use an eye-toggle testid pattern of <base>-toggle. A live test SFTP server runs at 127.0.0.1:2222 (sftptest / testpass123) — DO NOT test the user's real ASUSTOR NAS from this pod. Login testids unchanged. Users page: user-menu-button (top-right, opens Change Password menu). Change Password dialog testids: cp-current, cp-new, cp-confirm and their -toggle variants. Add User: new-user-password (+ -toggle). Edit User: edit-user-password (+ -toggle). Known minor UX bug: Change Password dialog is clipped at top on 1920x1080.",
+  "rca of the issue": "N/A — no functional bug found; all requested SFTP + eye-toggle behaviour works end-to-end. Only cosmetic finding: the Change Password dialog vertical positioning clips the top field above the viewport on 1920x1080. Likely cause: dialog uses an absolutely-positioned container without max-h/overflow-y-auto or without a centering wrapper. Repro: login as admin → click user-menu-button → 'Change Password' → 'Current password' field label is above the visible viewport. Mitigation: wrap the dialog content in a max-h-[90vh] overflow-y-auto container (same pattern already used by storage-dialog), or ensure the outer flex uses items-center on a full-height overlay."
+}

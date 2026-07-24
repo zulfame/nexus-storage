@@ -66,6 +66,7 @@ export default function Dashboard() {
               <div className="space-y-4">
                 <Bar label="S3 / Compatible" value={s.s3_count || 0} total={s.total_storages || 0} color="#059669" icon={Cloud} />
                 <Bar label="Samba / SMB" value={s.samba_count || 0} total={s.total_storages || 0} color="#d97706" icon={Server} />
+                <Bar label="SFTP" value={s.sftp_count || 0} total={s.total_storages || 0} color="#7c3aed" icon={HardDrive} />
               </div>
             </div>
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">

@@ -123,6 +123,7 @@ def storage_public(doc: dict) -> dict:
         "port": cfg.get("port", ""),
         "username": cfg.get("username", ""),
         "domain": cfg.get("domain", ""),
+        "base_path": cfg.get("base_path", ""),
         "access_key": cfg.get("access_key", ""),
     }
     return {
@@ -138,7 +139,7 @@ def decrypt_config(doc: dict) -> dict:
     cfg = dict(doc.get("config", {}))
     if doc["type"] == "s3" and cfg.get("secret_key"):
         cfg["secret_key"] = decrypt(cfg["secret_key"])
-    if doc["type"] == "samba" and cfg.get("password"):
+    if doc["type"] in ("samba", "sftp") and cfg.get("password"):
         cfg["password"] = decrypt(cfg["password"])
     return cfg
 
@@ -379,12 +380,12 @@ async def list_storages(user: dict = Depends(get_current_user)):
 
 @api_router.post("/storages")
 async def create_storage(body: StorageBody, admin: dict = Depends(require_admin)):
-    if body.type not in ("s3", "samba"):
-        raise HTTPException(status_code=400, detail="type must be s3 or samba")
+    if body.type not in ("s3", "samba", "sftp"):
+        raise HTTPException(status_code=400, detail="type must be s3, samba or sftp")
     cfg = dict(body.config)
     if body.type == "s3" and cfg.get("secret_key"):
         cfg["secret_key"] = encrypt(cfg["secret_key"])
-    if body.type == "samba" and cfg.get("password"):
+    if body.type in ("samba", "sftp") and cfg.get("password"):
         cfg["password"] = encrypt(cfg["password"])
     doc = {
         "name": body.name,
@@ -411,7 +412,7 @@ async def update_storage(storage_id: str, body: StorageBody, admin: dict = Depen
             cfg["secret_key"] = encrypt(cfg["secret_key"])
         else:
             cfg["secret_key"] = existing.get("secret_key", "") if same_type else ""
-    if body.type == "samba":
+    if body.type in ("samba", "sftp"):
         if cfg.get("password"):
             cfg["password"] = encrypt(cfg["password"])
         else:
@@ -664,12 +665,14 @@ async def dashboard_stats(admin: dict = Depends(require_admin)):
     total_storages = await db.storages.count_documents({})
     s3_count = await db.storages.count_documents({"type": "s3"})
     samba_count = await db.storages.count_documents({"type": "samba"})
+    sftp_count = await db.storages.count_documents({"type": "sftp"})
     total_users = await db.users.count_documents({})
     admin_count = await db.users.count_documents({"role": "admin"})
     return {
         "total_storages": total_storages,
         "s3_count": s3_count,
         "samba_count": samba_count,
+        "sftp_count": sftp_count,
         "total_users": total_users,
         "admin_count": admin_count,
     }

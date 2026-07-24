@@ -461,6 +461,122 @@ class TestUserUpdateAndAdminGuards:
             _cleanup_user(h, temp["id"])
 
 
+# ============ ITERATION 9: SFTP + /config endpoint ============
+class TestSFTP:
+    """Live SFTP server available at 127.0.0.1:2222 (sftptest/testpass123)."""
+    SFTP_CFG = {"host": "127.0.0.1", "port": 2222, "username": "sftptest", "password": "testpass123", "base_path": ""}
+
+    def test_sftp_test_connection_success(self):
+        h = _admin_headers()
+        r = requests.post(f"{API}/storages/test", json={"name": "t", "type": "sftp", "config": self.SFTP_CFG}, headers=h)
+        assert r.status_code == 200
+        assert r.json()["success"] is True, r.json()
+        assert "successful" in r.json()["message"].lower()
+
+    def test_sftp_test_connection_fail_bad_pw(self):
+        h = _admin_headers()
+        bad = dict(self.SFTP_CFG, password="wrong-pass")
+        r = requests.post(f"{API}/storages/test", json={"name": "t", "type": "sftp", "config": bad}, headers=h)
+        assert r.status_code == 200
+        assert r.json()["success"] is False
+
+    def test_sftp_crud_list_leak_check(self):
+        h = _admin_headers()
+        name = f"TEST_sftp_{uuid.uuid4().hex[:6]}"
+        r = requests.post(f"{API}/storages", json={"name": name, "type": "sftp", "config": self.SFTP_CFG}, headers=h)
+        assert r.status_code == 200, r.text
+        sid = r.json()["id"]
+        try:
+            # Password must NOT leak in create response
+            assert "password" not in r.json()["config"]
+            assert r.json()["config"].get("host") == "127.0.0.1"
+            assert str(r.json()["config"].get("port")) == "2222"
+
+            # LIST does not include password
+            g = requests.get(f"{API}/storages", headers=h).json()
+            row = next(x for x in g if x["id"] == sid)
+            assert "password" not in row["config"]
+
+            # Test saved storage -> should succeed (uses decrypted password)
+            r2 = requests.post(f"{API}/storages/{sid}/test", headers=h)
+            assert r2.status_code == 200
+            assert r2.json()["success"] is True, r2.json()
+
+            # /config endpoint returns decrypted password for admin (used to prefill edit)
+            r3 = requests.get(f"{API}/storages/{sid}/config", headers=h)
+            assert r3.status_code == 200
+            cfg = r3.json()["config"]
+            assert cfg["password"] == "testpass123", "decrypted password must match original for edit prefill"
+            assert cfg["username"] == "sftptest"
+            assert str(cfg["port"]) == "2222"
+
+            # Update without changing password -> password preserved (send empty)
+            r4 = requests.put(f"{API}/storages/{sid}", json={
+                "name": name + "_v2", "type": "sftp",
+                "config": {**self.SFTP_CFG, "password": ""},
+            }, headers=h)
+            assert r4.status_code == 200
+            # test still succeeds after update (means password preserved in db)
+            r5 = requests.post(f"{API}/storages/{sid}/test", headers=h)
+            assert r5.json()["success"] is True
+
+            # List files at root (via files endpoint)
+            r6 = requests.get(f"{API}/storages/{sid}/files", headers=h)
+            assert r6.status_code == 200, r6.text
+            body = r6.json()
+            assert "items" in body
+            assert isinstance(body["items"], list)
+        finally:
+            _cleanup_storage(h, sid)
+
+    def test_config_endpoint_requires_admin(self):
+        h = _admin_headers()
+        # unauthenticated
+        # create a storage first
+        s = requests.post(f"{API}/storages", json={"name": f"TEST_cfga_{uuid.uuid4().hex[:6]}", "type": "sftp", "config": self.SFTP_CFG}, headers=h).json()
+        sid = s["id"]
+        try:
+            r = requests.get(f"{API}/storages/{sid}/config")
+            assert r.status_code == 401
+            # non-admin user
+            email = f"test_cfg_{uuid.uuid4().hex[:6]}@example.com"
+            pw = "pw12345"
+            u = _create_user(h, email, pw)
+            try:
+                uh = _login(email, pw)
+                r = requests.get(f"{API}/storages/{sid}/config", headers=uh)
+                assert r.status_code == 403
+            finally:
+                _cleanup_user(h, u["id"])
+        finally:
+            _cleanup_storage(h, sid)
+
+    def test_config_endpoint_s3_decrypts_secret_key(self):
+        h = _admin_headers()
+        name = f"TEST_s3cfg_{uuid.uuid4().hex[:6]}"
+        r = requests.post(f"{API}/storages", json={
+            "name": name, "type": "s3",
+            "config": {"bucket": "b", "region": "us-east-1", "access_key": "AK", "secret_key": "mysekret"},
+        }, headers=h)
+        sid = r.json()["id"]
+        try:
+            r = requests.get(f"{API}/storages/{sid}/config", headers=h)
+            assert r.status_code == 200
+            assert r.json()["config"]["secret_key"] == "mysekret"
+        finally:
+            _cleanup_storage(h, sid)
+
+    def test_reject_bad_type_still_rejects(self):
+        h = _admin_headers()
+        r = requests.post(f"{API}/storages", json={"name": "x", "type": "ftp", "config": {}}, headers=h)
+        assert r.status_code == 400
+        # ensure sftp accepted (regression)
+        r = requests.post(f"{API}/storages", json={"name": f"TEST_smoke_{uuid.uuid4().hex[:6]}", "type": "sftp",
+            "config": self.SFTP_CFG}, headers=h)
+        assert r.status_code == 200
+        _cleanup_storage(h, r.json()["id"])
+
+
 # ============ ACCESS + PERMISSION ENFORCEMENT ============
 class TestAccessAndPermissions:
     def test_full_permission_flow(self):

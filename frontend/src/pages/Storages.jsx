@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
-import { Cloud, Server, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff } from "lucide-react";
+import { Cloud, Server, HardDrive, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff } from "lucide-react";
 
 const empty = {
   name: "",
@@ -19,6 +19,7 @@ const empty = {
     username: "",
     password: "",
     domain: "",
+    base_path: "",
   },
 };
 
@@ -62,6 +63,13 @@ const btnGhost =
 const btnOutline =
   "flex items-center gap-1.5 text-sm font-medium border border-gray-200 px-4 py-2 rounded-xl hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors";
 
+const TYPE_META = {
+  s3: { label: "S3", icon: Cloud, box: "bg-emerald-50 text-emerald-600" },
+  samba: { label: "Samba / SMB", icon: Server, box: "bg-amber-50 text-amber-600" },
+  sftp: { label: "SFTP", icon: HardDrive, box: "bg-violet-50 text-violet-600" },
+};
+const typeMeta = (t) => TYPE_META[t] || TYPE_META.samba;
+
 export default function Storages() {
   const [storages, setStorages] = useState([]);
   const [open, setOpen] = useState(false);
@@ -78,6 +86,12 @@ export default function Storages() {
   }, []);
 
   const setCfg = (k, v) => setForm((f) => ({ ...f, config: { ...f.config, [k]: v } }));
+
+  const changeType = (t) =>
+    setForm((f) => {
+      const port = t === "sftp" ? "2222" : t === "samba" ? "445" : f.config.port;
+      return { ...f, type: t, config: { ...f.config, port } };
+    });
 
   const openNew = () => {
     setForm(empty);
@@ -99,10 +113,14 @@ export default function Storages() {
 
   const payload = () => {
     const c = form.config;
-    const config =
-      form.type === "s3"
-        ? { region: c.region, endpoint: c.endpoint, bucket: c.bucket, access_key: c.access_key, secret_key: c.secret_key }
-        : { host: c.host, share: c.share, port: c.port, username: c.username, password: c.password, domain: c.domain };
+    let config;
+    if (form.type === "s3") {
+      config = { region: c.region, endpoint: c.endpoint, bucket: c.bucket, access_key: c.access_key, secret_key: c.secret_key };
+    } else if (form.type === "sftp") {
+      config = { host: c.host, port: c.port, username: c.username, password: c.password, base_path: c.base_path };
+    } else {
+      config = { host: c.host, share: c.share, port: c.port, username: c.username, password: c.password, domain: c.domain };
+    }
     return { name: form.name, type: form.type, config };
   };
 
@@ -195,8 +213,8 @@ export default function Storages() {
               >
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className={`h-11 w-11 flex items-center justify-center rounded-xl ${s.type === "s3" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
-                      {s.type === "s3" ? <Cloud size={22} /> : <Server size={22} />}
+                    <div className={`h-11 w-11 flex items-center justify-center rounded-xl ${typeMeta(s.type).box}`}>
+                      {(() => { const Ic = typeMeta(s.type).icon; return <Ic size={22} />; })()}
                     </div>
                     <div>
                       <div className="font-semibold text-sm text-gray-900">{s.name}</div>
@@ -209,6 +227,11 @@ export default function Storages() {
                     <>
                       <div><span className="text-gray-400">bucket</span> · {s.config.bucket || "—"}</div>
                       <div><span className="text-gray-400">endpoint</span> · {s.config.endpoint || "aws default"}</div>
+                    </>
+                  ) : s.type === "sftp" ? (
+                    <>
+                      <div><span className="text-gray-400">host</span> · {s.config.host || "—"}{s.config.port ? `:${s.config.port}` : ""}</div>
+                      <div><span className="text-gray-400">path</span> · {s.config.base_path ? `/${s.config.base_path}` : "/"}</div>
                     </>
                   ) : (
                     <>
@@ -254,16 +277,16 @@ export default function Storages() {
               <div>
                 <label className="text-sm font-medium text-gray-700 block mb-1.5">Type</label>
                 <div className="flex gap-2">
-                  {["s3", "samba"].map((t) => (
+                  {["s3", "samba", "sftp"].map((t) => (
                     <button
                       key={t}
-                      onClick={() => setForm((f) => ({ ...f, type: t }))}
+                      onClick={() => changeType(t)}
                       data-testid={`storage-type-${t}`}
-                      className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-colors ${
+                      className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-xl border transition-colors ${
                         form.type === t ? "border-primary text-blue-700 bg-blue-50" : "border-gray-200 text-gray-500 hover:bg-gray-50"
                       }`}
                     >
-                      {t === "s3" ? "S3 / Compatible" : "Samba / SMB"}
+                      {typeMeta(t).label}
                     </button>
                   ))}
                 </div>
@@ -276,6 +299,14 @@ export default function Storages() {
                   <Field label="Endpoint (optional, for MinIO/Wasabi)" value={form.config.endpoint} onChange={(v) => setCfg("endpoint", v)} placeholder="https://s3.example.com" testid="s3-endpoint-input" />
                   <Field label="Access Key" value={form.config.access_key} onChange={(v) => setCfg("access_key", v)} placeholder="AKIA…" testid="s3-access-key-input" />
                   <Field label="Secret Key" value={form.config.secret_key} onChange={(v) => setCfg("secret_key", v)} placeholder="••••••" type="password" testid="s3-secret-key-input" />
+                </>
+              ) : form.type === "sftp" ? (
+                <>
+                  <Field label="Host / IP" value={form.config.host} onChange={(v) => setCfg("host", v)} placeholder="192.168.2.8" testid="sftp-host-input" />
+                  <Field label="Port (SFTP default: 2222)" value={form.config.port} onChange={(v) => setCfg("port", v)} placeholder="2222" testid="sftp-port-input" />
+                  <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="admin" testid="sftp-username-input" />
+                  <Field label="Password" value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="sftp-password-input" />
+                  <Field label="Base path (optional)" value={form.config.base_path} onChange={(v) => setCfg("base_path", v)} placeholder="Public" testid="sftp-basepath-input" />
                 </>
               ) : (
                 <>
