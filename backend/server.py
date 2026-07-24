@@ -15,6 +15,7 @@ from bson import ObjectId
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
+from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.cors import CORSMiddleware
@@ -149,6 +150,11 @@ async def log_activity(user: dict, action: str, storage_doc: dict, path: str, de
         )
     except Exception as e:
         logger.warning("Failed to record activity log: %s", e)
+
+
+async def _log_reconnect(user, backend, sdoc, path=""):
+    if getattr(backend, "reconnected", False):
+        await log_activity(user, "reconnect", sdoc, path, "Connection dropped and was re-established automatically")
 
 
 def user_permission_for(user: dict, storage_id: str) -> Optional[str]:
@@ -292,6 +298,7 @@ async def create_storage(body: StorageBody, admin: dict = Depends(require_admin)
     }
     res = await db.storages.insert_one(doc)
     doc["_id"] = res.inserted_id
+    await log_activity(admin, "storage_added", doc, "", f"Added {body.type.upper()} storage")
     return storage_public(doc)
 
 
@@ -316,13 +323,16 @@ async def update_storage(storage_id: str, body: StorageBody, admin: dict = Depen
         {"$set": {"name": body.name, "type": body.type, "config": cfg}},
     )
     updated = await db.storages.find_one({"_id": ObjectId(storage_id)})
+    await log_activity(admin, "storage_updated", updated, "", "Storage settings updated")
     return storage_public(updated)
 
 
 @api_router.delete("/storages/{storage_id}")
 async def delete_storage(storage_id: str, admin: dict = Depends(require_admin)):
+    doc = await get_storage_or_404(storage_id)
     await db.storages.delete_one({"_id": ObjectId(storage_id)})
     await db.users.update_many({}, {"$pull": {"access": {"storage_id": storage_id}}})
+    await log_activity(admin, "storage_deleted", doc, "", "Storage connection removed")
     return {"status": "deleted"}
 
 
@@ -332,7 +342,7 @@ async def test_config(body: StorageBody, admin: dict = Depends(require_admin)):
     # if secrets omitted on test of existing storage, they must be provided by client
     try:
         backend = build_backend(body.type, cfg)
-        backend.test()
+        await run_in_threadpool(backend.test)
         return {"success": True, "message": "Connection successful"}
     except Exception as e:
         return {"success": False, "message": str(e)}
@@ -343,9 +353,11 @@ async def test_saved(storage_id: str, admin: dict = Depends(require_admin)):
     doc = await get_storage_or_404(storage_id)
     try:
         backend = build_backend(doc["type"], decrypt_config(doc))
-        backend.test()
+        await run_in_threadpool(backend.test)
+        await log_activity(admin, "connection_ok", doc, "", "Connection test succeeded")
         return {"success": True, "message": "Connection successful"}
     except Exception as e:
+        await log_activity(admin, "connection_failed", doc, "", f"Connection test failed: {e}")
         return {"success": False, "message": str(e)}
 
 
@@ -367,7 +379,9 @@ async def _resolve_backend(storage_id: str, user: dict, need_write: bool):
 async def list_files(storage_id: str, path: str = "", user: dict = Depends(get_current_user)):
     backend, sdoc = await _resolve_backend(storage_id, user, need_write=False)
     try:
-        return {"path": path, "items": backend.list(path)}
+        result = await run_in_threadpool(backend.list, path)
+        await _log_reconnect(user, backend, sdoc, path)
+        return {"path": path, "items": result}
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to list: {e}")
 
@@ -381,8 +395,9 @@ async def upload_file(
 ):
     backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
     try:
-        key = backend.upload(path, file.file, file.filename)
+        key = await run_in_threadpool(backend.upload, path, file.file, file.filename)
         await log_activity(user, "upload", sdoc, key)
+        await _log_reconnect(user, backend, sdoc, key)
         return {"status": "uploaded", "path": key}
     except HTTPException:
         raise
@@ -394,7 +409,8 @@ async def upload_file(
 async def download_file(storage_id: str, path: str, user: dict = Depends(get_current_user)):
     backend, sdoc = await _resolve_backend(storage_id, user, need_write=False)
     try:
-        stream, size = backend.download(path)
+        stream, size = await run_in_threadpool(backend.download, path)
+        await _log_reconnect(user, backend, sdoc, path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Download failed: {e}")
     filename = path.rstrip("/").split("/")[-1]
@@ -408,8 +424,9 @@ async def delete_file(
 ):
     backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
     try:
-        backend.delete(path, is_dir=is_dir)
+        await run_in_threadpool(backend.delete, path, is_dir)
         await log_activity(user, "delete_folder" if is_dir else "delete", sdoc, path)
+        await _log_reconnect(user, backend, sdoc, path)
         return {"status": "deleted"}
     except HTTPException:
         raise
@@ -421,9 +438,10 @@ async def delete_file(
 async def create_folder(storage_id: str, body: FolderBody, user: dict = Depends(get_current_user)):
     backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
     try:
-        backend.mkdir(body.path, body.name)
+        await run_in_threadpool(backend.mkdir, body.path, body.name)
         target = f"{body.path.rstrip('/')}/{body.name}" if body.path else body.name
         await log_activity(user, "create_folder", sdoc, target)
+        await _log_reconnect(user, backend, sdoc, target)
         return {"status": "created"}
     except HTTPException:
         raise
@@ -442,6 +460,7 @@ async def list_logs(admin: dict = Depends(require_admin)):
             "storage_name": l.get("storage_name"),
             "storage_type": l.get("storage_type"),
             "path": l.get("path"),
+            "detail": l.get("detail"),
             "timestamp": l.get("timestamp"),
         }
         for l in logs

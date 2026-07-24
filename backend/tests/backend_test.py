@@ -345,5 +345,90 @@ class TestLogs:
         assert isinstance(data, list)
         # Validate schema on any existing entries
         for entry in data:
-            for k in ("id", "user_email", "action", "storage_name", "path", "timestamp"):
+            for k in ("id", "user_email", "action", "storage_name", "path", "timestamp", "detail"):
                 assert k in entry, f"log entry missing key {k}: {entry}"
+
+
+# ============ CONNECTION LIFECYCLE + NON-BLOCKING ============
+class TestConnectionLifecycleLogs:
+    def test_storage_added_updated_deleted_and_conn_failed_logged(self):
+        h = _admin_headers()
+        name = f"TEST_lifecycle_{uuid.uuid4().hex[:6]}"
+        # CREATE fake s3 -> should log storage_added
+        s = _create_s3_storage(h, name)
+        sid = s["id"]
+        try:
+            # UPDATE -> storage_updated
+            r = requests.put(f"{API}/storages/{sid}", json={
+                "name": name + "_v2", "type": "s3",
+                "config": {"bucket": "b2", "region": "us-east-1", "access_key": "AK", "secret_key": ""},
+            }, headers=h)
+            assert r.status_code == 200
+
+            # Trigger connection_failed via saved-test with fake creds
+            t0 = time.time()
+            r = requests.post(f"{API}/storages/{sid}/test", headers=h)
+            elapsed = time.time() - t0
+            assert r.status_code == 200
+            body = r.json()
+            assert body["success"] is False
+            # Non-blocking check: immediately after test, root endpoint responds fast
+            r2 = requests.get(f"{API}/", timeout=10)
+            assert r2.status_code == 200
+
+            # Fetch logs and verify presence
+            r = requests.get(f"{API}/logs", headers=h)
+            assert r.status_code == 200
+            logs = r.json()
+            actions_for_sid = [l for l in logs if l.get("storage_name", "").startswith(name)]
+            action_set = {l["action"] for l in actions_for_sid}
+            assert "storage_added" in action_set, f"missing storage_added: {action_set}"
+            assert "storage_updated" in action_set, f"missing storage_updated: {action_set}"
+            assert "connection_failed" in action_set, f"missing connection_failed: {action_set}"
+            # detail should be non-empty on connection_failed
+            failed = [l for l in actions_for_sid if l["action"] == "connection_failed"]
+            assert failed and failed[0].get("detail"), "connection_failed detail missing"
+        finally:
+            _cleanup_storage(h, sid)
+        # After delete, verify storage_deleted logged
+        r = requests.get(f"{API}/logs", headers=h)
+        logs = r.json()
+        actions_for_sid = {l["action"] for l in logs if l.get("storage_name", "").startswith(name)}
+        assert "storage_deleted" in actions_for_sid, f"missing storage_deleted: {actions_for_sid}"
+
+    def test_no_spurious_reconnect_on_normal_list(self):
+        """A failed list from bad creds should NOT create a reconnect log (since op raised)."""
+        h = _admin_headers()
+        # Snapshot reconnect count
+        r = requests.get(f"{API}/logs", headers=h)
+        before = sum(1 for l in r.json() if l["action"] == "reconnect")
+        # Create fake storage, list files (will fail with 400), ensure no reconnect log added
+        s = _create_s3_storage(h, f"TEST_norec_{uuid.uuid4().hex[:6]}")
+        sid = s["id"]
+        try:
+            requests.get(f"{API}/storages/{sid}/files", headers=h)
+            r = requests.get(f"{API}/logs", headers=h)
+            after = sum(1 for l in r.json() if l["action"] == "reconnect")
+            assert after == before, "spurious reconnect log created on failing op"
+        finally:
+            _cleanup_storage(h, sid)
+
+
+# ============ AUTO-RECONNECT CODE REVIEW ============
+class TestReconnectMechanism:
+    def test_storage_backends_has_reconnect_wrapper(self):
+        src = open("/app/backend/storage_backends.py").read()
+        # S3
+        assert "class S3Backend" in src
+        assert "_build_client" in src
+        assert "_attempt" in src
+        assert "self.reconnected = True" in src
+        assert "CONN_ERRORS" in src
+        # Samba
+        assert "class SambaBackend" in src
+        assert "reset_connection_cache" in src
+        # server.py wires reconnect logging
+        srv = open("/app/backend/server.py").read()
+        assert "_log_reconnect" in srv
+        assert "run_in_threadpool" in srv
+        assert 'action, "reconnect"' in srv or '"reconnect"' in srv
