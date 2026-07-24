@@ -63,7 +63,25 @@ config, README env-var table).
   Sign out; POST /api/auth/change-password (bcrypt verify + rehash, >=6 chars).
 - Verified: 32/32 backend tests; frontend flows pass desktop + mobile.
 
+## Implemented (2026-06, fork: SFTP + secret reveal + modal redesign)
+- SFTP storage type (paramiko): SFTPBackend with test/list/upload/download/delete(recursive)/mkdir,
+  auto-reconnect, configurable port (default 2222), optional base_path (relative=home, /abs=root).
+  Registered in build_backend; server handles encrypt/decrypt/public-config for 'sftp'.
+- Password/secret UX: reusable PasswordInput + Field eye-toggle across Login, Storages
+  (S3 secret, Samba/SFTP password), Users (add/edit), Change Password. Values masked by default.
+- Secret verification on Edit: new admin endpoint GET /api/storages/{id}/config returns the
+  DECRYPTED config so the Edit dialog pre-fills real secrets (revealable via eye), while the
+  public GET /api/storages list still never leaks secrets.
+- Storage modal redesign: connection type moved to a shadcn Select at the top (with icon +
+  description), fields auto-adjust, 2/3-col grid layout, dynamic header icon, X close button.
+- Dashboard breakdown + stats include SFTP count.
+- Verified: iteration 9 (both) 53/53 backend + full UI incl. live SFTP server (127.0.0.1:2222);
+  iteration 10 (frontend) 100% for redesigned modal.
+- Note: design_guidelines.json describes a dark theme but the app is intentionally LIGHT-themed
+  and consistent — keep the light theme unless the user explicitly asks to switch.
+
 ## Backlog / Next
 - P1: Storage config validation (required fields per type); 404 on unknown/malformed ids.
+- P1: Optional SFTP private-key auth (currently password only).
 - P2: dedicated STORAGE_ENCRYPTION_KEY env; log counts via single aggregation; native BSON date timestamps.
 - P2: File rename/move/copy across storages; multi-file upload with progress; storage usage metrics.
