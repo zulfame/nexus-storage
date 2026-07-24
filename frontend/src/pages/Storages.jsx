@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
-import { Cloud, Server, HardDrive, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
+import { Cloud, Server, HardDrive, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff, X } from "lucide-react";
 
 const empty = {
   name: "",
@@ -64,9 +70,9 @@ const btnOutline =
   "flex items-center gap-1.5 text-sm font-medium border border-gray-200 px-4 py-2 rounded-xl hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors";
 
 const TYPE_META = {
-  s3: { label: "S3", icon: Cloud, box: "bg-emerald-50 text-emerald-600" },
-  samba: { label: "Samba / SMB", icon: Server, box: "bg-amber-50 text-amber-600" },
-  sftp: { label: "SFTP", icon: HardDrive, box: "bg-violet-50 text-violet-600" },
+  s3: { label: "S3 / Compatible", short: "S3", icon: Cloud, box: "bg-emerald-50 text-emerald-600", desc: "AWS S3, MinIO, Wasabi & compatible object storage" },
+  samba: { label: "Samba / SMB", short: "Samba", icon: Server, box: "bg-amber-50 text-amber-600", desc: "Windows / NAS network share over SMB (port 445)" },
+  sftp: { label: "SFTP", short: "SFTP", icon: HardDrive, box: "bg-violet-50 text-violet-600", desc: "Secure file transfer over SSH (recommended for NAS)" },
 };
 const typeMeta = (t) => TYPE_META[t] || TYPE_META.samba;
 
@@ -181,7 +187,7 @@ export default function Storages() {
               <p className="text-sm text-gray-600 mt-1">Connect and manage your storage in three quick steps.</p>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-5">
                 {[
-                  { n: 1, icon: Plug, title: "Add a connection", desc: "Create an S3 or Samba storage and test it." },
+                  { n: 1, icon: Plug, title: "Add a connection", desc: "Create an S3, Samba or SFTP storage and test it." },
                   { n: 2, icon: KeyRound, title: "Grant access", desc: "Assign users read or write per storage." },
                   { n: 3, icon: FolderOpen, title: "Browse files", desc: "Upload, download and organize your files." },
                 ].map((s) => (
@@ -201,7 +207,7 @@ export default function Storages() {
 
         {storages.length === 0 ? (
           <div className="border border-dashed border-gray-300 rounded-2xl p-16 text-center text-gray-400 bg-white">
-            No storages yet. Add your first S3 or Samba connection.
+            No storages yet. Add your first S3, Samba or SFTP connection.
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="storages-list">
@@ -265,69 +271,123 @@ export default function Storages() {
       </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" data-testid="storage-dialog">
-            <div className="p-6 border-b border-gray-100">
-              <h3 className="font-display font-bold text-xl tracking-tight text-gray-900">
-                {editId ? "Edit Storage" : "Add Storage"}
-              </h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <Field label="Name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="My Bucket" testid="storage-name-input" />
-              <div>
-                <label className="text-sm font-medium text-gray-700 block mb-1.5">Type</label>
-                <div className="flex gap-2">
-                  {["s3", "samba", "sftp"].map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => changeType(t)}
-                      data-testid={`storage-type-${t}`}
-                      className={`flex-1 py-2 text-xs sm:text-sm font-medium rounded-xl border transition-colors ${
-                        form.type === t ? "border-primary text-blue-700 bg-blue-50" : "border-gray-200 text-gray-500 hover:bg-gray-50"
-                      }`}
-                    >
-                      {typeMeta(t).label}
-                    </button>
-                  ))}
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg max-h-[92vh] flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150" data-testid="storage-dialog">
+            {/* Header */}
+            <div className="relative px-6 pt-6 pb-5 border-b border-gray-100">
+              <button
+                onClick={() => setOpen(false)}
+                data-testid="close-storage-dialog"
+                aria-label="Close"
+                className="absolute top-5 right-5 h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+              <div className="flex items-center gap-3.5">
+                <div className={`h-12 w-12 flex items-center justify-center rounded-xl shrink-0 ${typeMeta(form.type).box}`}>
+                  {(() => { const Ic = typeMeta(form.type).icon; return <Ic size={24} />; })()}
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-xl tracking-tight text-gray-900">
+                    {editId ? "Edit Storage" : "Add Storage"}
+                  </h3>
+                  <p className="text-sm text-gray-500 mt-0.5">{typeMeta(form.type).desc}</p>
                 </div>
               </div>
-
-              {form.type === "s3" ? (
-                <>
-                  <Field label="Bucket" value={form.config.bucket} onChange={(v) => setCfg("bucket", v)} placeholder="my-bucket" testid="s3-bucket-input" />
-                  <Field label="Region" value={form.config.region} onChange={(v) => setCfg("region", v)} placeholder="us-east-1" testid="s3-region-input" />
-                  <Field label="Endpoint (optional, for MinIO/Wasabi)" value={form.config.endpoint} onChange={(v) => setCfg("endpoint", v)} placeholder="https://s3.example.com" testid="s3-endpoint-input" />
-                  <Field label="Access Key" value={form.config.access_key} onChange={(v) => setCfg("access_key", v)} placeholder="AKIA…" testid="s3-access-key-input" />
-                  <Field label="Secret Key" value={form.config.secret_key} onChange={(v) => setCfg("secret_key", v)} placeholder="••••••" type="password" testid="s3-secret-key-input" />
-                </>
-              ) : form.type === "sftp" ? (
-                <>
-                  <Field label="Host / IP" value={form.config.host} onChange={(v) => setCfg("host", v)} placeholder="192.168.2.8" testid="sftp-host-input" />
-                  <Field label="Port (SFTP default: 2222)" value={form.config.port} onChange={(v) => setCfg("port", v)} placeholder="2222" testid="sftp-port-input" />
-                  <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="admin" testid="sftp-username-input" />
-                  <Field label="Password" value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="sftp-password-input" />
-                  <Field label="Base path (optional)" value={form.config.base_path} onChange={(v) => setCfg("base_path", v)} placeholder="Public" testid="sftp-basepath-input" />
-                </>
-              ) : (
-                <>
-                  <Field label="Host / IP" value={form.config.host} onChange={(v) => setCfg("host", v)} placeholder="192.168.1.10" testid="samba-host-input" />
-                  <Field label="Share" value={form.config.share} onChange={(v) => setCfg("share", v)} placeholder="shared" testid="samba-share-input" />
-                  <Field label="Port (SMB default: 445)" value={form.config.port} onChange={(v) => setCfg("port", v)} placeholder="445" testid="samba-port-input" />
-                  <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="user" testid="samba-username-input" />
-                  <Field label="Password" value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="samba-password-input" />
-                  <Field label="Domain (optional)" value={form.config.domain} onChange={(v) => setCfg("domain", v)} placeholder="WORKGROUP" testid="samba-domain-input" />
-                </>
-              )}
             </div>
-            <div className="p-6 border-t border-gray-100 flex items-center gap-2">
-              <button onClick={test} disabled={testing} data-testid="test-connection-button" className={btnOutline + " disabled:opacity-60"}>
-                {testing ? <Loader2 size={15} className="animate-spin" /> : <Plug size={15} />} Test
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto">
+              <div>
+                <label className="text-sm font-medium text-gray-700 block mb-1.5">Connection type</label>
+                <Select value={form.type} onValueChange={changeType}>
+                  <SelectTrigger data-testid="storage-type-select" className="w-full h-12 rounded-xl border-gray-200 px-3.5 focus:ring-2 focus:ring-blue-100 focus:border-primary">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${typeMeta(form.type).box}`}>
+                        {(() => { const Ic = typeMeta(form.type).icon; return <Ic size={15} />; })()}
+                      </span>
+                      <span className="font-medium text-sm text-gray-900">{typeMeta(form.type).label}</span>
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {["s3", "samba", "sftp"].map((t) => (
+                      <SelectItem key={t} value={t} data-testid={`storage-type-${t}`} className="rounded-lg py-2.5 cursor-pointer">
+                        <div className="flex items-center gap-2.5 pr-2">
+                          <span className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${typeMeta(t).box}`}>
+                            {(() => { const Ic = typeMeta(t).icon; return <Ic size={16} />; })()}
+                          </span>
+                          <div>
+                            <div className="font-medium text-sm text-gray-900 leading-tight">{typeMeta(t).label}</div>
+                            <div className="text-xs text-gray-400 leading-tight mt-0.5">{typeMeta(t).desc}</div>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Field label="Display name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="e.g. Production NAS" testid="storage-name-input" />
+
+              <div className="pt-1">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="overline">{typeMeta(form.type).short} settings</span>
+                  <div className="flex-1 h-px bg-gray-100" />
+                </div>
+
+                {form.type === "s3" ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field label="Bucket" value={form.config.bucket} onChange={(v) => setCfg("bucket", v)} placeholder="my-bucket" testid="s3-bucket-input" />
+                      <Field label="Region" value={form.config.region} onChange={(v) => setCfg("region", v)} placeholder="us-east-1" testid="s3-region-input" />
+                    </div>
+                    <Field label="Endpoint (optional, for MinIO/Wasabi)" value={form.config.endpoint} onChange={(v) => setCfg("endpoint", v)} placeholder="https://s3.example.com" testid="s3-endpoint-input" />
+                    <Field label="Access Key" value={form.config.access_key} onChange={(v) => setCfg("access_key", v)} placeholder="AKIA…" testid="s3-access-key-input" />
+                    <Field label="Secret Key" value={form.config.secret_key} onChange={(v) => setCfg("secret_key", v)} placeholder="••••••" type="password" testid="s3-secret-key-input" />
+                  </div>
+                ) : form.type === "sftp" ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="sm:col-span-2">
+                        <Field label="Host / IP" value={form.config.host} onChange={(v) => setCfg("host", v)} placeholder="192.168.2.8" testid="sftp-host-input" />
+                      </div>
+                      <Field label="Port" value={form.config.port} onChange={(v) => setCfg("port", v)} placeholder="2222" testid="sftp-port-input" />
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="admin" testid="sftp-username-input" />
+                      <Field label="Password" value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="sftp-password-input" />
+                    </div>
+                    <Field label="Base path (optional)" value={form.config.base_path} onChange={(v) => setCfg("base_path", v)} placeholder="Leave empty for home folder" testid="sftp-basepath-input" />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                      <div className="sm:col-span-2">
+                        <Field label="Host / IP" value={form.config.host} onChange={(v) => setCfg("host", v)} placeholder="192.168.1.10" testid="samba-host-input" />
+                      </div>
+                      <Field label="Port" value={form.config.port} onChange={(v) => setCfg("port", v)} placeholder="445" testid="samba-port-input" />
+                    </div>
+                    <Field label="Share" value={form.config.share} onChange={(v) => setCfg("share", v)} placeholder="shared" testid="samba-share-input" />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="user" testid="samba-username-input" />
+                      <Field label="Password" value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="samba-password-input" />
+                    </div>
+                    <Field label="Domain (optional)" value={form.config.domain} onChange={(v) => setCfg("domain", v)} placeholder="WORKGROUP" testid="samba-domain-input" />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t border-gray-100 flex items-center gap-2 bg-gray-50/60">
+              <button onClick={test} disabled={testing} data-testid="test-connection-button" className={btnOutline + " bg-white disabled:opacity-60"}>
+                {testing ? <Loader2 size={15} className="animate-spin" /> : <Plug size={15} />} Test connection
               </button>
               <div className="flex-1" />
               <button onClick={() => setOpen(false)} data-testid="cancel-storage-button" className={btnGhost}>Cancel</button>
               <button onClick={save} disabled={saving} data-testid="save-storage-button" className={btnPrimary + " disabled:opacity-60"}>
                 {saving && <Loader2 size={15} className="animate-spin" />}
-                {editId ? "Save" : "Add"}
+                {editId ? "Save changes" : "Add storage"}
               </button>
             </div>
           </div>
