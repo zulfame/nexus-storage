@@ -258,6 +258,28 @@ class SambaBackend:
         self._attempt(lambda: smbclient.mkdir(self._unc(target)))
 
 
+def humanize_storage_error(exc: Exception) -> str:
+    s = str(exc)
+    low = s.lower()
+    if any(k in low for k in ("name or service not known", "getaddrinfo", "nodename nor servname", "failed to connect")):
+        if "timed out" not in low:
+            return ("Host not found / unreachable. Check the IP or hostname "
+                    "(each part must be 0-255, e.g. 192.168.2.8) and that the server is on.")
+    if "timed out" in low or "timeout" in low:
+        return "Connection timed out. Check the port (SMB uses 445) and firewall/network reachability."
+    if "refused" in low:
+        return "Connection refused. The port is closed on the server — SMB usually uses port 445."
+    if any(k in low for k in ("logon_failure", "access_denied", "access is denied", "authentication", "credential", "password")):
+        return "Authentication failed. Check the username, password and domain (often WORKGROUP)."
+    if "bad_network_name" in low or ("share" in low and "not found" in low):
+        return "Share not found. Check the share name (the shared folder name, not a sub-path)."
+    if "nosuchbucket" in low or "does not exist" in low:
+        return "Bucket/share not found. Check the name."
+    if "signaturedoesnotmatch" in low or "invalidaccesskey" in low or "403" in low or "forbidden" in low:
+        return "Access denied. Check the access key / secret (S3) or credentials."
+    return s
+
+
 def build_backend(storage_type: str, cfg: dict):
     if storage_type == "s3":
         return S3Backend(cfg)

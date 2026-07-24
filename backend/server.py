@@ -22,7 +22,7 @@ from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.cors import CORSMiddleware
 
 from crypto_util import encrypt, decrypt
-from storage_backends import build_backend, StorageError
+from storage_backends import build_backend, StorageError, humanize_storage_error
 
 # ---------------------------------------------------------------- config
 mongo_url = os.environ["MONGO_URL"]
@@ -443,7 +443,7 @@ async def test_config(body: StorageBody, admin: dict = Depends(require_admin)):
         await run_in_threadpool(backend.test)
         return {"success": True, "message": "Connection successful"}
     except Exception as e:
-        return {"success": False, "message": str(e)}
+        return {"success": False, "message": humanize_storage_error(e)}
 
 
 @api_router.post("/storages/{storage_id}/test")
@@ -455,8 +455,9 @@ async def test_saved(storage_id: str, admin: dict = Depends(require_admin)):
         await log_activity(admin, "connection_ok", doc, "", "Connection test succeeded")
         return {"success": True, "message": "Connection successful"}
     except Exception as e:
-        await log_activity(admin, "connection_failed", doc, "", f"Connection test failed: {e}")
-        return {"success": False, "message": str(e)}
+        msg = humanize_storage_error(e)
+        await log_activity(admin, "connection_failed", doc, "", f"Connection test failed: {msg}")
+        return {"success": False, "message": msg}
 
 
 # ---------------------------------------------------------------- file routes
@@ -481,7 +482,7 @@ async def list_files(storage_id: str, path: str = "", user: dict = Depends(get_c
         await _log_reconnect(user, backend, sdoc, path)
         return {"path": path, "items": result}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to list: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to list files: {humanize_storage_error(e)}")
 
 
 @api_router.post("/storages/{storage_id}/files/upload")
@@ -500,7 +501,7 @@ async def upload_file(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Upload failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Upload failed: {humanize_storage_error(e)}")
 
 
 @api_router.get("/storages/{storage_id}/files/download")
@@ -510,7 +511,7 @@ async def download_file(storage_id: str, path: str, user: dict = Depends(get_cur
         stream, size = await run_in_threadpool(backend.download, path)
         await _log_reconnect(user, backend, sdoc, path)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Download failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Download failed: {humanize_storage_error(e)}")
     filename = path.rstrip("/").split("/")[-1]
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
     return StreamingResponse(stream, media_type="application/octet-stream", headers=headers)
@@ -529,7 +530,7 @@ async def delete_file(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Delete failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Delete failed: {humanize_storage_error(e)}")
 
 
 @api_router.post("/storages/{storage_id}/files/folder")
@@ -544,7 +545,7 @@ async def create_folder(storage_id: str, body: FolderBody, user: dict = Depends(
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Create folder failed: {e}")
+        raise HTTPException(status_code=400, detail=f"Create folder failed: {humanize_storage_error(e)}")
 
 
 @api_router.get("/logs")
