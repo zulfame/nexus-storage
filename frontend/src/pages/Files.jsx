@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { UserMenu } from "@/components/UserMenu";
 import { FilePreview } from "@/components/FilePreview";
+import { UploadDialog } from "@/components/UploadDialog";
 import { fileMeta, isPreviewable } from "@/lib/fileTypes";
 import { toast } from "sonner";
 import {
@@ -20,6 +21,7 @@ import {
   Search,
   Eye,
   MoreHorizontal,
+  UploadCloud,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -57,13 +59,15 @@ export default function Files() {
   const [path, setPath] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
   const [newFolder, setNewFolder] = useState(false);
   const [folderName, setFolderName] = useState("");
   const [view, setView] = useState(() => localStorage.getItem("files_view") || "list");
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState(null);
+  const [uploadFiles, setUploadFiles] = useState(null);
+  const [dragging, setDragging] = useState(false);
   const fileInput = useRef(null);
+  const reqId = useRef(0);
 
   const canWrite = active?.permission === "write";
 
@@ -82,15 +86,20 @@ export default function Files() {
   const loadFiles = useCallback(
     async (p) => {
       if (!active) return;
+      const myId = ++reqId.current;
+      const sid = active.id;
       setLoading(true);
+      setItems([]);
       try {
-        const r = await api.get(`/storages/${active.id}/files`, { params: { path: p } });
+        const r = await api.get(`/storages/${sid}/files`, { params: { path: p } });
+        if (reqId.current !== myId) return;
         setItems(r.data.items);
       } catch (e) {
+        if (reqId.current !== myId) return;
         toast.error(apiError(e, "Failed to list files"));
         setItems([]);
       } finally {
-        setLoading(false);
+        if (reqId.current === myId) setLoading(false);
       }
     },
     [active]
@@ -125,23 +134,18 @@ export default function Files() {
 
   const crumbs = path ? path.split("/").filter(Boolean) : [];
 
-  const onUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    const fd = new FormData();
-    fd.append("path", path);
-    fd.append("file", file);
-    try {
-      await api.post(`/storages/${active.id}/files/upload`, fd);
-      toast.success(`Uploaded ${file.name}`);
-      loadFiles(path);
-    } catch (err) {
-      toast.error(apiError(err, "Upload failed"));
-    } finally {
-      setUploading(false);
-      if (fileInput.current) fileInput.current.value = "";
-    }
+  const onFilePicked = (e) => {
+    const fs = Array.from(e.target.files || []);
+    if (fs.length) setUploadFiles(fs);
+    if (fileInput.current) fileInput.current.value = "";
+  };
+
+  const onDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    if (!canWrite) return;
+    const fs = Array.from(e.dataTransfer?.files || []);
+    if (fs.length) setUploadFiles(fs);
   };
 
   const download = async (item) => {
@@ -295,17 +299,29 @@ export default function Files() {
                     <button onClick={() => setNewFolder(true)} data-testid="new-folder-button" className={btnOutline}>
                       <FolderPlus size={15} /> <span className="hidden sm:inline">Folder</span>
                     </button>
-                    <button onClick={() => fileInput.current?.click()} disabled={uploading} data-testid="upload-file-button" className={btnPrimary}>
-                      {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} <span className="hidden sm:inline">Upload</span>
+                    <button onClick={() => fileInput.current?.click()} data-testid="upload-file-button" className={btnPrimary}>
+                      <Upload size={15} /> <span className="hidden sm:inline">Upload</span>
                     </button>
-                    <input ref={fileInput} type="file" onChange={onUpload} className="hidden" data-testid="file-input" />
+                    <input ref={fileInput} type="file" multiple onChange={onFilePicked} className="hidden" data-testid="file-input" />
                   </>
                 )}
                 <UserMenu />
               </div>
             </header>
 
-            <div className="p-4 sm:p-6">
+            <div
+              className="p-4 sm:p-6 relative"
+              onDragOver={(e) => { if (canWrite) { e.preventDefault(); setDragging(true); } }}
+              onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }}
+              onDrop={onDrop}
+            >
+              {dragging && (
+                <div className="absolute inset-3 sm:inset-5 z-20 rounded-2xl border-2 border-dashed border-blue-400 bg-blue-50/80 backdrop-blur-sm flex flex-col items-center justify-center pointer-events-none" data-testid="drop-overlay">
+                  <UploadCloud size={36} className="text-blue-500 mb-2" />
+                  <div className="text-sm font-semibold text-blue-700">Drop files to upload</div>
+                  <div className="text-xs text-blue-500 mt-0.5">to {active.name}{path ? `/${path}` : ""}</div>
+                </div>
+              )}
               {/* toolbar: search + view toggle */}
               <div className="flex items-center gap-3 mb-4 flex-wrap">
                 <div className="relative flex-1 min-w-[180px] max-w-sm">
@@ -433,6 +449,16 @@ export default function Files() {
           item={preview}
           onClose={() => setPreview(null)}
           onDownload={download}
+        />
+      )}
+
+      {uploadFiles && active && (
+        <UploadDialog
+          storageId={active.id}
+          path={path}
+          files={uploadFiles}
+          onClose={() => setUploadFiles(null)}
+          onDone={() => loadFiles(path)}
         />
       )}
 
