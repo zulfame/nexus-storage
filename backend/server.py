@@ -134,18 +134,21 @@ def decrypt_config(doc: dict) -> dict:
 
 
 async def log_activity(user: dict, action: str, storage_doc: dict, path: str, detail: str = ""):
-    await db.activity_logs.insert_one(
-        {
-            "user_email": user.get("email"),
-            "action": action,
-            "storage_id": str(storage_doc["_id"]),
-            "storage_name": storage_doc.get("name"),
-            "storage_type": storage_doc.get("type"),
-            "path": path,
-            "detail": detail,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    try:
+        await db.activity_logs.insert_one(
+            {
+                "user_email": user.get("email"),
+                "action": action,
+                "storage_id": str(storage_doc["_id"]),
+                "storage_name": storage_doc.get("name"),
+                "storage_type": storage_doc.get("type"),
+                "path": path,
+                "detail": detail,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+    except Exception as e:
+        logger.warning("Failed to record activity log: %s", e)
 
 
 def user_permission_for(user: dict, storage_id: str) -> Optional[str]:
@@ -506,6 +509,7 @@ async def seed_admin():
 @app.on_event("startup")
 async def on_startup():
     await db.users.create_index("email", unique=True)
+    await db.activity_logs.create_index([("timestamp", -1)])
     await seed_admin()
 
 
