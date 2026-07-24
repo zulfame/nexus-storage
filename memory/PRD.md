@@ -80,6 +80,22 @@ config, README env-var table).
 - Note: design_guidelines.json describes a dark theme but the app is intentionally LIGHT-themed
   and consistent — keep the light theme unless the user explicitly asks to switch.
 
+## Implemented (2026-06, fork: File Browser UX + upload progress)
+- Removed the Getting Started card from List Storage page.
+- File Browser overhaul: list/grid view toggle (persisted in localStorage), per-folder search,
+  colored file-type icons (lib/fileTypes.js), row/card click opens preview or downloads.
+- FilePreview modal (components/FilePreview.jsx): images, pdf (iframe), text/code, docx
+  (mammoth), xlsx/csv (SheetJS with sheet tabs), video, audio; 25MB guard + graceful fallbacks.
+- Breadcrumb collapse: deep paths show root › … (dropdown of hidden folders) › last 2; header
+  actions (Folder/Upload/UserMenu) stay pinned right on one row (no wrap).
+- Animated Upload modal (components/UploadDialog.jsx): multi-file sequential upload with
+  per-file progress bars (axios onUploadProgress) to 100% + done/error states.
+- Drag-and-drop upload onto the browser area with a 'Drop files' overlay.
+- Fixed storage-switch race condition in loadFiles (reqId ref guard + clear on switch).
+- Storage sidebar/type icons include SFTP (HardDrive).
+- Verified: iteration 11 (File Browser ~95%, race bug noted) + iteration 12 (100%, upload
+  progress + drag-drop + race fix). New deps: mammoth, xlsx.
+
 ## Backlog / Next
 - P1: Storage config validation (required fields per type); 404 on unknown/malformed ids.
 - P1: Optional SFTP private-key auth (currently password only).
