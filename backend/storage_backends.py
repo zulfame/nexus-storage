@@ -127,6 +127,34 @@ class S3Backend:
         key = f"{base}/{name}/" if base else f"{name}/"
         self._attempt(lambda: self.client.put_object(Bucket=self.bucket, Key=key))
 
+    def _copy_key(self, src: str, dst: str):
+        self.client.copy_object(Bucket=self.bucket, CopySource={"Bucket": self.bucket, "Key": src}, Key=dst)
+
+    def copy(self, src: str, dst: str, is_dir: bool = False):
+        src = _norm(src)
+        dst = _norm(dst)
+
+        def op():
+            if is_dir:
+                sp = src + "/"
+                dp = dst + "/"
+                paginator = self.client.get_paginator("list_objects_v2")
+                found = False
+                for page in paginator.paginate(Bucket=self.bucket, Prefix=sp):
+                    for o in page.get("Contents", []):
+                        found = True
+                        self._copy_key(o["Key"], dp + o["Key"][len(sp):])
+                if not found:
+                    self.client.put_object(Bucket=self.bucket, Key=dp)
+            else:
+                self._copy_key(src, dst)
+
+        self._attempt(op)
+
+    def move(self, src: str, dst: str, is_dir: bool = False):
+        self.copy(src, dst, is_dir)
+        self.delete(src, is_dir)
+
 
 class SambaBackend:
     def __init__(self, cfg: dict):
@@ -260,6 +288,33 @@ class SambaBackend:
         base = _norm(path)
         target = f"{base}/{name}" if base else name
         self._attempt(lambda: smbclient.mkdir(self._unc(target)))
+
+    def move(self, src: str, dst: str, is_dir: bool = False):
+        self._attempt(lambda: smbclient.rename(self._unc(src), self._unc(dst)))
+
+    def _copyfile(self, src: str, dst: str):
+        with smbclient.open_file(self._unc(src), mode="rb") as f:
+            data = f.read()
+        with smbclient.open_file(self._unc(dst), mode="wb") as f:
+            f.write(data)
+
+    def _copytree(self, src: str, dst: str):
+        smbclient.mkdir(self._unc(dst))
+        rel = _norm(src)
+        reld = _norm(dst)
+        for entry in smbclient.scandir(self._unc(src)):
+            s = f"{rel}/{entry.name}" if rel else entry.name
+            d = f"{reld}/{entry.name}" if reld else entry.name
+            if entry.is_dir():
+                self._copytree(s, d)
+            else:
+                self._copyfile(s, d)
+
+    def copy(self, src: str, dst: str, is_dir: bool = False):
+        if is_dir:
+            self._attempt(lambda: self._copytree(src, dst))
+        else:
+            self._attempt(lambda: self._copyfile(src, dst))
 
 
 class SFTPBackend:
@@ -420,6 +475,41 @@ class SFTPBackend:
         base = _norm(path)
         target = f"{base}/{name}" if base else name
         self._attempt(lambda: self._sftp.mkdir(self._remote(target)))
+
+    def move(self, src: str, dst: str, is_dir: bool = False):
+        def op():
+            rs, rd = self._remote(src), self._remote(dst)
+            try:
+                self._sftp.posix_rename(rs, rd)
+            except (AttributeError, IOError):
+                self._sftp.rename(rs, rd)
+        self._attempt(op)
+
+    def _copyfile(self, src: str, dst: str):
+        buf = io.BytesIO()
+        self._sftp.getfo(self._remote(src), buf)
+        buf.seek(0)
+        self._sftp.putfo(buf, self._remote(dst))
+
+    def _copytree(self, src: str, dst: str):
+        self._sftp.mkdir(self._remote(dst))
+        rel, reld = _norm(src), _norm(dst)
+        for attr in self._sftp.listdir_attr(self._remote(src)):
+            name = attr.filename
+            if name in (".", ".."):
+                continue
+            s = f"{rel}/{name}" if rel else name
+            d = f"{reld}/{name}" if reld else name
+            if stat_module.S_ISDIR(attr.st_mode):
+                self._copytree(s, d)
+            else:
+                self._copyfile(s, d)
+
+    def copy(self, src: str, dst: str, is_dir: bool = False):
+        if is_dir:
+            self._attempt(lambda: self._copytree(src, dst))
+        else:
+            self._attempt(lambda: self._copyfile(src, dst))
 
 
 def humanize_storage_error(exc: Exception) -> str:

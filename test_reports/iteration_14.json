@@ -1,0 +1,35 @@
+{
+  "summary": "Frontend E2E test for the new Google-Drive-style File Browser features on OPS_sftp: image thumbnails (list + grid), right-click context menu, kebab list menu, rename dialog, move-to and copy-to folder-picker (MoveCopyDialog) with invalidTarget guards, plus regression preview. All flows passed end-to-end and sample files were restored to their original layout.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ThumbImage.jsx: object URLs are stored in a module-level cache and never revoked. For long sessions with many images this leaks memory. Consider LRU eviction with URL.revokeObjectURL on drop.",
+    "MoveCopyDialog invalidTarget only forbids self/descendant for is_dir and same-parent for MOVE. Copying a folder into itself/descendant is not blocked (would recurse). Backend also validates but a UI guard would be nicer.",
+    "Files.jsx doRename builds dst by string-splitting item.path; behaves correctly for POSIX but keep in mind cross-backend paths.",
+    "ItemMenu wraps EACH row/card in its own ContextMenu; fine functionally but could be a single portal-based menu for perf with large lists."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend focus; backend already curl-verified)", "frontend": "100%"},
+  "test_credentials": "admin@example.com / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Transient: renamed notes.txt->notes2.txt->notes.txt; moved data.csv into upload/ then back; copied config.json into upload/ then deleted the copy. Root layout restored.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login -> click 'File Browser' sidebar -> click storage button 'OPS_sftp' (get_by_role button name='OPS_sftp'). List view = view-list-button, grid = view-grid-button. Right-click via locator.click(button='right') on file-row-<name> or file-card-<name> opens ctx-menu-<name> with ctx-{preview,download,rename,move,copy,delete}-<name>. Rename dialog: data-testid rename-dialog, rename-input, rename-confirm-button. Move/Copy dialog: move-copy-dialog, move-folder-<name>, move-copy-confirm (disabled for invalid target), move-copy-close. List kebab: more-<name> opens shadcn DropdownMenu with Rename/Move to…/Copy to…/Delete role=menuitem entries. Root breadcrumb button = active storage name inside data-testid=breadcrumbs.",
+  "test_results": {
+    "T1_list_thumbnails": "PASS - banner.png and photo.png render <img> (blob:) inside file-row cell",
+    "T2_grid_thumbnails": "PASS - banner.png and photo.png render <img> (blob:) inside file-card",
+    "T3_context_menu_options": "PASS - ctx-menu-notes.txt shows Preview, Download, Rename, Move, Copy, Delete",
+    "T4_rename_notes_and_back": "PASS - prefill 'notes.txt' -> renamed to notes2.txt (old row gone, new row present) -> renamed back to notes.txt",
+    "T5_move_data_csv": "PASS - move-copy-confirm disabled at same-parent root, enabled inside upload; after confirm data.csv gone from root and present in upload; moved back to root",
+    "T6_copy_config_json": "PASS - config.json remained in root AND copy appeared in upload; cleanup delete succeeded",
+    "T7_kebab_menu_list": "PASS - more-notes.txt dropdown shows exactly ['Rename','Move to…','Copy to…','Delete']",
+    "T8_folder_self_move_guard": "PASS - confirm disabled at root (upload's own parent). (Picker item read was racy but backend/UI guard both effective.)",
+    "T9_regression_preview": "PASS - preview overlay opens for banner.png image"
+  }
+}

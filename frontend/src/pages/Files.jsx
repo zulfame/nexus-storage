@@ -3,7 +3,9 @@ import api, { apiError } from "@/lib/api";
 import { UserMenu } from "@/components/UserMenu";
 import { FilePreview } from "@/components/FilePreview";
 import { UploadDialog } from "@/components/UploadDialog";
-import { fileMeta, isPreviewable } from "@/lib/fileTypes";
+import { MoveCopyDialog } from "@/components/MoveCopyDialog";
+import { ThumbImage } from "@/components/ThumbImage";
+import { fileMeta, isPreviewable, categoryOf } from "@/lib/fileTypes";
 import { toast } from "sonner";
 import {
   Cloud,
@@ -22,6 +24,10 @@ import {
   Eye,
   MoreHorizontal,
   UploadCloud,
+  Pencil,
+  FolderInput,
+  Copy as CopyIcon,
+  FolderOpen,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -29,6 +35,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 
 function fmtSize(n) {
   if (!n) return "—";
@@ -67,6 +80,9 @@ export default function Files() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadInitial, setUploadInitial] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [renameItem, setRenameItem] = useState(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [moveCopy, setMoveCopy] = useState(null); // { item, mode }
   const reqId = useRef(0);
 
   const openUpload = (files) => {
@@ -185,9 +201,58 @@ export default function Files() {
     }
   };
 
+  const openRename = (item) => {
+    setRenameItem(item);
+    setRenameValue(item.name);
+  };
+
+  const doRename = async () => {
+    const name = renameValue.trim();
+    if (!name || name === renameItem.name) return setRenameItem(null);
+    if (/[\\/]/.test(name)) return toast.error("Name cannot contain slashes");
+    const parent = renameItem.path.includes("/") ? renameItem.path.slice(0, renameItem.path.lastIndexOf("/")) : "";
+    const dst = parent ? `${parent}/${name}` : name;
+    try {
+      await api.post(`/storages/${active.id}/files/move`, { src: renameItem.path, dst, is_dir: renameItem.is_dir, copy: false });
+      toast.success("Renamed");
+      setRenameItem(null);
+      loadFiles(path);
+    } catch (e) {
+      toast.error(apiError(e, "Rename failed"));
+    }
+  };
+
   const filtered = query.trim()
     ? items.filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()))
     : items;
+
+  const ItemMenu = ({ item, children }) => (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+      <ContextMenuContent className="w-52" data-testid={`ctx-menu-${item.name}`}>
+        {item.is_dir ? (
+          <ContextMenuItem onClick={() => enter(item)} className="cursor-pointer"><FolderOpen size={15} className="mr-2 text-blue-500" /> Open</ContextMenuItem>
+        ) : (
+          <>
+            {isPreviewable(item.name) && (
+              <ContextMenuItem onClick={() => setPreview(item)} data-testid={`ctx-preview-${item.name}`} className="cursor-pointer"><Eye size={15} className="mr-2 text-gray-500" /> Preview</ContextMenuItem>
+            )}
+            <ContextMenuItem onClick={() => download(item)} data-testid={`ctx-download-${item.name}`} className="cursor-pointer"><Download size={15} className="mr-2 text-gray-500" /> Download</ContextMenuItem>
+          </>
+        )}
+        {canWrite && (
+          <>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => openRename(item)} data-testid={`ctx-rename-${item.name}`} className="cursor-pointer"><Pencil size={15} className="mr-2 text-gray-500" /> Rename</ContextMenuItem>
+            <ContextMenuItem onClick={() => setMoveCopy({ item, mode: "move" })} data-testid={`ctx-move-${item.name}`} className="cursor-pointer"><FolderInput size={15} className="mr-2 text-gray-500" /> Move to…</ContextMenuItem>
+            <ContextMenuItem onClick={() => setMoveCopy({ item, mode: "copy" })} data-testid={`ctx-copy-${item.name}`} className="cursor-pointer"><CopyIcon size={15} className="mr-2 text-gray-500" /> Copy to…</ContextMenuItem>
+            <ContextMenuSeparator />
+            <ContextMenuItem onClick={() => remove(item)} data-testid={`ctx-delete-${item.name}`} className="cursor-pointer text-red-600 focus:text-red-600"><Trash2 size={15} className="mr-2" /> Delete</ContextMenuItem>
+          </>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
+  );
 
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-0px)]">
@@ -354,17 +419,24 @@ export default function Files() {
                   {filtered.map((item) => {
                     const meta = fileMeta(item.name);
                     const Ic = item.is_dir ? Folder : meta.icon;
+                    const isImg = !item.is_dir && categoryOf(item.name) === "image";
                     return (
+                      <ItemMenu key={item.path} item={item}>
                       <div
-                        key={item.path}
                         data-testid={`file-card-${item.name}`}
                         onDoubleClick={() => openItem(item)}
                         className="group relative bg-white border border-gray-200 rounded-2xl p-4 flex flex-col items-center text-center hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
                         onClick={() => openItem(item)}
                       >
-                        <div className={`h-14 w-14 rounded-xl flex items-center justify-center mb-2.5 ${item.is_dir ? "bg-blue-50 text-blue-500" : meta.box}`}>
-                          <Ic size={26} fill={item.is_dir ? "#dbeafe" : "none"} />
-                        </div>
+                        {isImg ? (
+                          <div className="h-14 w-14 rounded-xl overflow-hidden mb-2.5 bg-gray-50 border border-gray-100">
+                            <ThumbImage storageId={active.id} item={item} fallback={<Ic size={26} className="text-sky-500" />} />
+                          </div>
+                        ) : (
+                          <div className={`h-14 w-14 rounded-xl flex items-center justify-center mb-2.5 ${item.is_dir ? "bg-blue-50 text-blue-500" : meta.box}`}>
+                            <Ic size={26} fill={item.is_dir ? "#dbeafe" : "none"} />
+                          </div>
+                        )}
                         <div className="text-xs font-medium text-gray-800 truncate w-full" title={item.name}>{item.name}</div>
                         <div className="text-[11px] text-gray-400 mt-0.5">{item.is_dir ? "Folder" : fmtSize(item.size)}</div>
                         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -380,6 +452,7 @@ export default function Files() {
                           )}
                         </div>
                       </div>
+                      </ItemMenu>
                     );
                   })}
                 </div>
@@ -399,36 +472,52 @@ export default function Files() {
                           const meta = fileMeta(item.name);
                           const Ic = item.is_dir ? Folder : meta.icon;
                           return (
-                            <tr key={item.path} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors group cursor-pointer" data-testid={`file-row-${item.name}`} onClick={() => openItem(item)}>
+                            <ItemMenu key={item.path} item={item}>
+                            <tr className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors group cursor-pointer" data-testid={`file-row-${item.name}`} onClick={() => openItem(item)}>
                               <td className="px-4 py-2.5">
                                 <div className={`flex items-center gap-2.5 ${item.is_dir ? "text-gray-800" : "text-gray-700"}`}>
-                                  <span className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 ${item.is_dir ? "bg-blue-50 text-blue-500" : meta.box}`}>
-                                    <Ic size={16} fill={item.is_dir ? "#dbeafe" : "none"} />
+                                  <span className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden ${item.is_dir ? "bg-blue-50 text-blue-500" : meta.box}`}>
+                                    {!item.is_dir && categoryOf(item.name) === "image" ? (
+                                      <ThumbImage storageId={active.id} item={item} fallback={<Ic size={16} className="text-sky-500" />} />
+                                    ) : (
+                                      <Ic size={16} fill={item.is_dir ? "#dbeafe" : "none"} />
+                                    )}
                                   </span>
                                   <span className="truncate">{item.name}</span>
                                 </div>
                               </td>
                               <td className="px-4 py-2.5 text-gray-500">{item.is_dir ? "—" : fmtSize(item.size)}</td>
                               <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
-                                <div className="flex items-center justify-end gap-1.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                <div className="flex items-center justify-end gap-1.5">
                                   {!item.is_dir && isPreviewable(item.name) && (
-                                    <button onClick={() => setPreview(item)} data-testid={`preview-${item.name}`} aria-label="Preview" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                                    <button onClick={() => setPreview(item)} data-testid={`preview-${item.name}`} aria-label="Preview" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors sm:opacity-0 sm:group-hover:opacity-100">
                                       <Eye size={14} />
                                     </button>
                                   )}
                                   {!item.is_dir && (
-                                    <button onClick={() => download(item)} data-testid={`download-${item.name}`} aria-label="Download" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                                    <button onClick={() => download(item)} data-testid={`download-${item.name}`} aria-label="Download" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors sm:opacity-0 sm:group-hover:opacity-100">
                                       <Download size={14} />
                                     </button>
                                   )}
                                   {canWrite && (
-                                    <button onClick={() => remove(item)} data-testid={`delete-file-${item.name}`} aria-label="Delete" className="p-1.5 border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
-                                      <Trash2 size={14} />
-                                    </button>
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button data-testid={`more-${item.name}`} aria-label="More actions" className="p-1.5 border border-gray-200 rounded-lg text-gray-500 hover:text-gray-800 hover:bg-gray-100 transition-colors">
+                                          <MoreHorizontal size={14} />
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-44">
+                                        <DropdownMenuItem onClick={() => openRename(item)} className="cursor-pointer"><Pencil size={14} className="mr-2 text-gray-500" /> Rename</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setMoveCopy({ item, mode: "move" })} className="cursor-pointer"><FolderInput size={14} className="mr-2 text-gray-500" /> Move to…</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => setMoveCopy({ item, mode: "copy" })} className="cursor-pointer"><CopyIcon size={14} className="mr-2 text-gray-500" /> Copy to…</DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => remove(item)} className="cursor-pointer text-red-600 focus:text-red-600"><Trash2 size={14} className="mr-2" /> Delete</DropdownMenuItem>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
                                   )}
                                 </div>
                               </td>
                             </tr>
+                            </ItemMenu>
                           );
                         })}
                       </tbody>
@@ -481,6 +570,41 @@ export default function Files() {
             <div className="p-6 border-t border-gray-100 flex justify-end gap-2">
               <button onClick={() => setNewFolder(false)} className="text-sm font-medium px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100">Cancel</button>
               <button onClick={createFolder} data-testid="create-folder-button" className="bg-primary text-white font-semibold text-sm px-5 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm">Create</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {moveCopy && active && (
+        <MoveCopyDialog
+          storageId={active.id}
+          item={moveCopy.item}
+          mode={moveCopy.mode}
+          onClose={() => setMoveCopy(null)}
+          onDone={() => loadFiles(path)}
+        />
+      )}
+
+      {renameItem && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-150" onClick={() => setRenameItem(null)}>
+          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-sm shadow-2xl animate-in zoom-in-95 duration-150" data-testid="rename-dialog" onClick={(e) => e.stopPropagation()}>
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="font-display font-bold text-xl tracking-tight text-gray-900">Rename {renameItem.is_dir ? "folder" : "file"}</h3>
+            </div>
+            <div className="p-6">
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">New name</label>
+              <input
+                autoFocus
+                value={renameValue}
+                onChange={(e) => setRenameValue(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && doRename()}
+                onFocus={(e) => e.target.select()}
+                data-testid="rename-input"
+                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
+              />
+            </div>
+            <div className="p-6 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setRenameItem(null)} className="text-sm font-medium px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100">Cancel</button>
+              <button onClick={doRename} data-testid="rename-confirm-button" className="bg-primary text-white font-semibold text-sm px-5 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm">Rename</button>
             </div>
           </div>
         </div>

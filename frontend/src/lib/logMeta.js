@@ -10,6 +10,8 @@ import {
   Activity,
   Settings,
   AlertTriangle,
+  MoveRight,
+  Copy,
 } from "lucide-react";
 
 export const LOG_META = {
@@ -17,6 +19,8 @@ export const LOG_META = {
   delete: { label: "Delete File", icon: Trash2, color: "#dc2626", cat: "file" },
   delete_folder: { label: "Delete Folder", icon: Trash2, color: "#dc2626", cat: "file" },
   create_folder: { label: "New Folder", icon: FolderPlus, color: "#059669", cat: "file" },
+  move: { label: "Move / Rename", icon: MoveRight, color: "#0891b2", cat: "file" },
+  copy: { label: "Copy", icon: Copy, color: "#7c3aed", cat: "file" },
   connection_ok: { label: "Connection OK", icon: Plug, color: "#059669", cat: "conn" },
   connection_failed: { label: "Connection Failed", icon: Unplug, color: "#dc2626", cat: "conn" },
   reconnect: { label: "Auto-Reconnect", icon: PlugZap, color: "#d97706", cat: "conn" },

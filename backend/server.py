@@ -230,6 +230,13 @@ class FolderBody(BaseModel):
     name: str
 
 
+class MoveBody(BaseModel):
+    src: str
+    dst: str
+    is_dir: bool = False
+    copy: bool = False
+
+
 class SettingsBody(BaseModel):
     app_name: str = ""
     tagline: str = ""
@@ -254,7 +261,7 @@ DEFAULT_SETTINGS = {
     "primary_color": "#2563eb",
 }
 
-FILE_ACTIONS = ["upload", "delete", "delete_folder", "create_folder"]
+FILE_ACTIONS = ["upload", "delete", "delete_folder", "create_folder", "move", "copy"]
 
 
 async def get_settings() -> dict:
@@ -558,6 +565,32 @@ async def create_folder(storage_id: str, body: FolderBody, user: dict = Depends(
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Create folder failed: {humanize_storage_error(e)}")
+
+
+@api_router.post("/storages/{storage_id}/files/move")
+async def move_file(storage_id: str, body: MoveBody, user: dict = Depends(get_current_user)):
+    src = body.src.strip().strip("/")
+    dst = body.dst.strip().strip("/")
+    if not src or not dst:
+        raise HTTPException(status_code=400, detail="Source and destination are required")
+    if src == dst:
+        raise HTTPException(status_code=400, detail="Source and destination are the same")
+    if body.is_dir and (dst == src or dst.startswith(src + "/")):
+        raise HTTPException(status_code=400, detail="Cannot move a folder into itself")
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
+    try:
+        if body.copy:
+            await run_in_threadpool(backend.copy, src, dst, body.is_dir)
+            await log_activity(user, "copy", sdoc, dst, f"Copied from {src}")
+        else:
+            await run_in_threadpool(backend.move, src, dst, body.is_dir)
+            await log_activity(user, "move", sdoc, dst, f"Moved from {src}")
+        await _log_reconnect(user, backend, sdoc, dst)
+        return {"status": "ok", "path": dst}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"{'Copy' if body.copy else 'Move'} failed: {humanize_storage_error(e)}")
 
 
 @api_router.get("/logs")
