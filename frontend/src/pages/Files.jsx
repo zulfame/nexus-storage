@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import api, { apiError } from "@/lib/api";
+import { UserMenu } from "@/components/UserMenu";
 import { toast } from "sonner";
 import {
   Cloud,
@@ -201,17 +202,20 @@ export default function Files() {
                 })}
               </div>
 
-              {canWrite && (
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setNewFolder(true)} data-testid="new-folder-button" className={btnOutline}>
-                    <FolderPlus size={15} /> <span className="hidden sm:inline">Folder</span>
-                  </button>
-                  <button onClick={() => fileInput.current?.click()} disabled={uploading} data-testid="upload-file-button" className={btnPrimary}>
-                    {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Upload
-                  </button>
-                  <input ref={fileInput} type="file" onChange={onUpload} className="hidden" data-testid="file-input" />
-                </div>
-              )}
+              <div className="flex items-center gap-2">
+                {canWrite && (
+                  <>
+                    <button onClick={() => setNewFolder(true)} data-testid="new-folder-button" className={btnOutline}>
+                      <FolderPlus size={15} /> <span className="hidden sm:inline">Folder</span>
+                    </button>
+                    <button onClick={() => fileInput.current?.click()} disabled={uploading} data-testid="upload-file-button" className={btnPrimary}>
+                      {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Upload
+                    </button>
+                    <input ref={fileInput} type="file" onChange={onUpload} className="hidden" data-testid="file-input" />
+                  </>
+                )}
+                <UserMenu />
+              </div>
             </header>
 
             <div className="p-4 sm:p-6">

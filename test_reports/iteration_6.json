@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 6 (both) — validated the new UserMenu + Change Password feature. Backend: added TestChangePassword class to /app/backend/tests/backend_test.py (auth-required 401; wrong current -> 400 'Current password is incorrect'; new_password<6 -> 400 'at least 6 characters'; happy path 200 + old pw no longer works + new pw works; role='admin' user rotate+restore). All 32/32 pytest tests pass. Frontend (playwright, desktop 1440x900 + mobile 390x844): (1) user-menu-button appears in the shared PageHeader on /dashboard, /storages, /users, /logs, /settings AND in the Files header. (2) Dropdown shows the user email + capitalized role, Change password + Sign out items with the exact testids. (3) Validations: mismatched confirm -> toast 'New passwords do not match'; new pw<6 -> toast 'New password must be at least 6 characters'; wrong current -> toast 'Current password is incorrect' (backend returns 400). (4) Happy path: admin admin123 -> newAdm123 succeeded, dialog closed, logout, re-login with new password worked, then rotated back to admin123 (VERIFIED). (5) Regular user: created temp user (role=user) via API, granted read access to a TEST_ui storage, logged in, landed on /files with user-menu-button in Files header, changed own password from Files header successfully, signed out & re-logged in with new pw. Temp user + temp storage cleaned up. (6) Mobile: user-menu-button remains visible & clickable at 390px (name text hidden as expected). No regressions detected in Dashboard recent activity or sidebar navigation.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Files.jsx", "issue": "When a regular user has NO storages assigned yet, the Files header (which hosts <UserMenu/>) is NOT rendered — only the empty-state 'Select or ask an admin to assign a storage.' is shown. Such a user therefore has NO way to open Change Password from the UI (they only have Sign out in the sidebar footer). This directly contradicts the review requirement 'user menu (and thus Change Password) is also reachable for a REGULAR user on the File Browser page header'. Reproduction: create a user with role=user and grant no storages, log in -> /files renders WITHOUT user-menu-button.", "selector": "[data-testid=\"user-menu-button\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Files.jsx: render the header (with <UserMenu/>) unconditionally — move the header outside the `!active ? ... : ...` branch OR render an always-on top bar so no-storage users can still access Change Password / Sign out. Example: hoist the <header> above the ternary, and only render breadcrumbs+actions when `active` is truthy."
+  ],
+  "critical_code_review_comments": [
+    "Files.jsx couples the top header (with UserMenu) to `active` storage — if user has no storages, there is no user menu on /files. See action_items.",
+    "server.py POST /api/auth/change-password: consider (a) returning 401 (not 400) for 'Current password is incorrect' — 400 is normally reserved for validation errors, 401 for auth failures; (b) invalidating other JWTs by bumping a per-user token version — currently the token stays valid indefinitely (stateless) which is documented but is a latent issue for a real security use case.",
+    "UserMenu.jsx: `submit` uses toast.error but the returned Promise is unhandled by the caller (Dropdown item). Not a bug, but consider disabling submit on empty `current` client-side to avoid a needless server round-trip.",
+    "UserMenu.jsx: modal is a custom overlay (fixed inset-0) but not focus-trapped and doesn't close on Escape/backdrop click. Minor a11y issue.",
+    "Password inputs don't have a visibility toggle — usability nit, not required."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py", "/app/test_reports/iteration_6.json"],
+  "success_rate": {"backend": "100% (32/32)", "frontend": "100% of change-password flows; 1 medium UI gap on empty-state Files header"},
+  "test_credentials": "admin@example.com / admin123 (restored)",
+  "seed_data_creation": "Transient TEST_* storages + temp regular users created & cleaned up. Admin password rotated to newAdm123 during UI test and restored to admin123 at end (verified via login).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "New endpoint: POST /api/auth/change-password (auth required, body {current_password,new_password}). Returns 400 for 'Current password is incorrect' or 'New password must be at least 6 characters'. Frontend testids: user-menu-button, menu-change-password, menu-logout, change-password-dialog, cp-current, cp-new, cp-confirm, cp-submit. Modal is a custom overlay (not a native confirm) — use force=True clicks. Toaster: sonner (bottom-right). Regular-user redirect: fresh login lands on /files (or /dashboard for admin). NOTE the Files.jsx header (with UserMenu) is only rendered when an `active` storage is selected — grant the temp user read access to any storage before asserting the Files-header UserMenu, else UserMenu won't be in the DOM.",
+  "rca of the issue": "Files.jsx layout: the ternary at line ~184 renders either the empty-state block (no <header>) or the storage view (with <header> containing <UserMenu/>). UserMenu was added inside the storage-view branch only. Fix is a small hoist: render a header shell always, put breadcrumbs/action buttons behind the `active` check, keep <UserMenu/> always visible."
+}

@@ -96,6 +96,68 @@ class TestAuth:
         assert r.json()["role"] == "admin"
 
 
+# ============ CHANGE PASSWORD ============
+class TestChangePassword:
+    def test_requires_auth(self):
+        r = requests.post(f"{API}/auth/change-password", json={"current_password": "x", "new_password": "yyyyyy"})
+        assert r.status_code == 401
+
+    def test_change_password_flow(self):
+        h = _admin_headers()
+        email = f"test_cp_{uuid.uuid4().hex[:8]}@example.com"
+        pw = "pw12345"
+        u = _create_user(h, email, pw)
+        uid = u["id"]
+        try:
+            uh = _login(email, pw)
+            # wrong current
+            r = requests.post(f"{API}/auth/change-password", json={"current_password": "WRONG", "new_password": "newpw123"}, headers=uh)
+            assert r.status_code == 400
+            assert "current password" in r.json()["detail"].lower()
+            # too short
+            r = requests.post(f"{API}/auth/change-password", json={"current_password": pw, "new_password": "abc"}, headers=uh)
+            assert r.status_code == 400
+            assert "6 characters" in r.json()["detail"]
+            # success
+            new_pw = "newpw123"
+            r = requests.post(f"{API}/auth/change-password", json={"current_password": pw, "new_password": new_pw}, headers=uh)
+            assert r.status_code == 200
+            # old password no longer works
+            r = requests.post(f"{API}/auth/login", json={"email": email, "password": pw})
+            assert r.status_code == 401
+            # new password works
+            r = requests.post(f"{API}/auth/login", json={"email": email, "password": new_pw})
+            assert r.status_code == 200
+            # bcrypt hash format
+            # (indirect check via login above; server stores $2b$ via passlib)
+        finally:
+            _cleanup_user(h, uid)
+
+    def test_admin_change_password_and_restore(self):
+        """Change admin password then restore to admin123.
+        NOTE: Serialized-ish: other tests use admin creds; this test is quick and restores immediately.
+        We use a helper that does not depend on the shared admin token between change+restore."""
+        # Skip if any parallel worker might use admin creds — instead, exercise via a fresh temp admin
+        h = _admin_headers()
+        email = f"test_tmpadmin_{uuid.uuid4().hex[:8]}@example.com"
+        pw = "adminpw123"
+        u = _create_user(h, email, pw, role="admin")
+        try:
+            uh = _login(email, pw)
+            new_pw = "adminpw999"
+            r = requests.post(f"{API}/auth/change-password", json={"current_password": pw, "new_password": new_pw}, headers=uh)
+            assert r.status_code == 200
+            # verify new works
+            r = requests.post(f"{API}/auth/login", json={"email": email, "password": new_pw})
+            assert r.status_code == 200
+            # restore
+            uh2 = {"Authorization": f"Bearer {r.json()['access_token']}"}
+            r = requests.post(f"{API}/auth/change-password", json={"current_password": new_pw, "new_password": pw}, headers=uh2)
+            assert r.status_code == 200
+        finally:
+            _cleanup_user(h, u["id"])
+
+
 # ============ DASHBOARD ============
 class TestDashboard:
     def test_stats_admin(self):
