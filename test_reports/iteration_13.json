@@ -1,0 +1,31 @@
+{
+  "summary": "Frontend-only regression + feature test for the new modal-based Upload UX on Files page (SFTP storage PREVIEW_sftp). Verified select→progress phase transition, per-file progress rows, completion toast, Done/X buttons and busy gating, drag-drop overlay, and regression flows (search, view toggle, download, create folder). All checks passed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "UploadDialog.jsx: initialFiles is captured only on mount via startedRef; correct guard for the drag-drop → progress phase auto-start. OK.",
+    "Files.jsx onDragLeave uses e.currentTarget === e.target — this can be flaky when children are present; consider a counter-based approach for robustness, but current behaviour looks correct in tests.",
+    "Toast for multi-file upload is fired only once at end (aggregated) — matches spec; individual per-file toasts intentionally suppressed."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "100%"},
+  "test_credentials": "admin@example.com / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created & deleted TEST_upload_one.txt, TEST_upload_two.txt, TEST_upload_three.txt, TEST_folder in PREVIEW_sftp root.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login lands on /dashboard first — click 'File Browser' sidebar item (get_by_text('File Browser', exact=True)) to reach /files. PREVIEW_sftp is selected by clicking the storage switcher button with has_text='PREVIEW_sftp'. Upload button (data-testid=upload-file-button) opens the modal at select phase (data-testid=upload-dropzone). Selecting files via [data-testid=upload-input] transitions to progress (data-testid=upload-list) and completes with data-testid=upload-done-button visible + sonner toast. Drag over content area shows data-testid=drop-overlay.",
+  "test_results": {
+    "T1_upload_button_opens_select_modal": "PASS — dialog+dropzone visible, upload-list absent, close-btn present, dropzone text 'Drag & drop files here / click to browse'",
+    "T2_single_file_upload": "PASS — progress phase entered, done button appeared, toast '1 file uploaded successfully', green check rendered, file visible in list",
+    "T3_multi_file_sequential": "PASS — 2 rows shown, toast '2 files uploaded successfully', both files in list",
+    "T4_close_x_in_select_phase": "PASS — dialog closes via upload-close-button",
+    "T5_drag_drop_overlay": "PASS — data-testid=drop-overlay appears on dragover of the content area",
+    "T6_regression_search_grid_list_download_create_folder": "PASS — search filter works, grid/list toggle works, download triggered, folder created"
+  }
+}

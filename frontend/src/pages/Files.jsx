@@ -64,10 +64,15 @@ export default function Files() {
   const [view, setView] = useState(() => localStorage.getItem("files_view") || "list");
   const [query, setQuery] = useState("");
   const [preview, setPreview] = useState(null);
-  const [uploadFiles, setUploadFiles] = useState(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [uploadInitial, setUploadInitial] = useState(null);
   const [dragging, setDragging] = useState(false);
-  const fileInput = useRef(null);
   const reqId = useRef(0);
+
+  const openUpload = (files) => {
+    setUploadInitial(files && files.length ? files : null);
+    setUploadOpen(true);
+  };
 
   const canWrite = active?.permission === "write";
 
@@ -134,18 +139,12 @@ export default function Files() {
 
   const crumbs = path ? path.split("/").filter(Boolean) : [];
 
-  const onFilePicked = (e) => {
-    const fs = Array.from(e.target.files || []);
-    if (fs.length) setUploadFiles(fs);
-    if (fileInput.current) fileInput.current.value = "";
-  };
-
   const onDrop = (e) => {
     e.preventDefault();
     setDragging(false);
     if (!canWrite) return;
     const fs = Array.from(e.dataTransfer?.files || []);
-    if (fs.length) setUploadFiles(fs);
+    if (fs.length) openUpload(fs);
   };
 
   const download = async (item) => {
@@ -299,10 +298,9 @@ export default function Files() {
                     <button onClick={() => setNewFolder(true)} data-testid="new-folder-button" className={btnOutline}>
                       <FolderPlus size={15} /> <span className="hidden sm:inline">Folder</span>
                     </button>
-                    <button onClick={() => fileInput.current?.click()} data-testid="upload-file-button" className={btnPrimary}>
+                    <button onClick={() => openUpload(null)} data-testid="upload-file-button" className={btnPrimary}>
                       <Upload size={15} /> <span className="hidden sm:inline">Upload</span>
                     </button>
-                    <input ref={fileInput} type="file" multiple onChange={onFilePicked} className="hidden" data-testid="file-input" />
                   </>
                 )}
                 <UserMenu />
@@ -452,12 +450,12 @@ export default function Files() {
         />
       )}
 
-      {uploadFiles && active && (
+      {uploadOpen && active && (
         <UploadDialog
           storageId={active.id}
           path={path}
-          files={uploadFiles}
-          onClose={() => setUploadFiles(null)}
+          initialFiles={uploadInitial}
+          onClose={() => { setUploadOpen(false); setUploadInitial(null); }}
           onDone={() => loadFiles(path)}
         />
       )}
