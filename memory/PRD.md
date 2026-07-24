@@ -37,8 +37,21 @@ config, README env-var table).
 - SEO: noindex meta + robots.txt Disallow.
 - README `## Environment Variables` table; `.env.example`. Testing: 19/19 backend pass.
 
+## Implemented (2026-07-24, later iterations)
+- Light theme (Google-Drive style), Poppins font, header/sidebar shadows, fully responsive
+  (mobile drawer, scrollable tables). SEO noindex.
+- Auto-reconnect: S3 (rebuild client) & Samba (reset+re-register session) retry wrapper on
+  connection errors, with a `reconnected` flag surfaced as a 'reconnect' activity log.
+- Blocking S3/Samba calls moved to threadpool (run_in_threadpool) — never block event loop.
+- Connection/lifecycle activity logging: storage_added/updated/deleted, connection_ok/failed,
+  reconnect. Logs endpoint returns `detail`.
+- Redesigned Logs Activity page: summary stat cards, All/File/Connection filter tabs,
+  informative table (activity badge, avatar, storage, details, relative time).
+- Guarded update_storage against secret loss on storage type change.
+- Verified: 22/22 backend tests, 100% frontend flows (desktop + mobile).
+
 ## Backlog / Next
 - P1: Storage config validation (required fields per type); 404 on unknown/malformed ids;
-  reject storage type conversion on PUT; connection-test timeout.
+  connection-test timeout hardening.
 - P2: Logs pagination/filters (user/action/storage/date); dedicated STORAGE_ENCRYPTION_KEY env.
 - P2: File rename/move/copy across storages; multi-file upload with progress; storage usage metrics.

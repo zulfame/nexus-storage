@@ -307,17 +307,18 @@ async def update_storage(storage_id: str, body: StorageBody, admin: dict = Depen
     doc = await get_storage_or_404(storage_id)
     existing = dict(doc.get("config", {}))
     cfg = dict(body.config)
-    # preserve existing secret if not provided (empty) on update
+    same_type = body.type == doc.get("type")
+    # preserve existing secret if not provided (empty) on update of same type
     if body.type == "s3":
         if cfg.get("secret_key"):
             cfg["secret_key"] = encrypt(cfg["secret_key"])
         else:
-            cfg["secret_key"] = existing.get("secret_key", "")
+            cfg["secret_key"] = existing.get("secret_key", "") if same_type else ""
     if body.type == "samba":
         if cfg.get("password"):
             cfg["password"] = encrypt(cfg["password"])
         else:
-            cfg["password"] = existing.get("password", "")
+            cfg["password"] = existing.get("password", "") if same_type else ""
     await db.storages.update_one(
         {"_id": ObjectId(storage_id)},
         {"$set": {"name": body.name, "type": body.type, "config": cfg}},
