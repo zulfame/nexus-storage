@@ -1,0 +1,128 @@
+{
+  "theme_strategy": {
+    "mode": "dark",
+    "rationale": "Storage management and infrastructure tools benefit from a high-contrast, technical dark theme to reduce eye strain during extended use and evoke a 'command center' feel."
+  },
+  "typography": {
+    "headings": {
+      "family": "Cabinet Grotesk, sans-serif",
+      "weights": ["500", "700", "900"],
+      "usage": "Use tight letter spacing (tracking-tight). Capitalize overlines with wide tracking. Never use Inter for headings."
+    },
+    "body": {
+      "family": "IBM Plex Sans, sans-serif",
+      "weights": ["400", "500"],
+      "usage": "Clean, highly readable humanist sans for UI labels, paragraphs, and general content."
+    },
+    "monospace_and_data": {
+      "family": "JetBrains Mono, monospace",
+      "weights": ["400", "500"],
+      "usage": "CRITICAL: Use for all file names, file sizes, connection strings, IPs, ports, S3 buckets, and data tables. It emphasizes the technical nature of the app."
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl font-bold tracking-tight",
+      "h2": "text-2xl sm:text-3xl font-bold tracking-tight",
+      "h3": "text-xl font-semibold",
+      "body": "text-sm md:text-base text-gray-300",
+      "labels": "text-xs font-medium uppercase tracking-[0.2em] text-gray-500"
+    }
+  },
+  "colors": {
+    "archetype": "THE PERFORMANCE PRO (Technical / Infrastructure)",
+    "palette": {
+      "background": "#0A0A0A",
+      "surface": "#121212",
+      "surface_hover": "#1A1A1A",
+      "border": "#2A2A2A",
+      "primary": "#00E5FF",
+      "primary_hover": "#00B3CC",
+      "text_primary": "#FFFFFF",
+      "text_secondary": "#A0A0A0",
+      "success": "#34D399",
+      "warning": "#FBBF24",
+      "danger": "#EF4444"
+    },
+    "rules": [
+      "No full-screen gradients. Keep the background purely solid #0A0A0A.",
+      "Use Electric Cyan (#00E5FF) strictly for primary actions, active connection states, and progress bars.",
+      "Hover states must be explicitly defined (e.g., hover:bg-[#1A1A1A] hover:text-white).",
+      "Tint neutrals with a hint of blue so they don't look muddy."
+    ]
+  },
+  "visual_enhancers": {
+    "surface_strategy": "GRID BORDERS & TACTICAL MINIMALISM",
+    "rules": [
+      "Use sharp edges. Override shadcn border radius: rounded-none or rounded-sm (max 2px or 4px).",
+      "No glassmorphism. Flat solid surfaces only to prevent visual refraction of dense data.",
+      "Replace soft drop-shadows with 1px solid strokes (border-border).",
+      "Add a subtle inner glow (box-shadow: inset 0 1px 0 rgba(255,255,255,0.05)) to elevated cards.",
+      "Use 'Tracing Beam' or glowing borders exclusively for 'Active/Connected' storage nodes."
+    ]
+  },
+  "grids_and_layouts": {
+    "dashboard_stats": "MODE B: High Density Grid (grid-cols-1 md:grid-cols-3 lg:grid-cols-4) with gap-4 or gap-6.",
+    "file_manager": "Use a robust table/list pattern. The sidebar (Storage Switcher) should be fixed on the left (w-64), with the main file browser filling the remaining space (flex-1).",
+    "spacing": "Use p-6 or p-8 for cards. File tables should have dense padding (py-2 px-4) to maximize visible files."
+  },
+  "components": {
+    "strategy": "Shadcn UI heavily customized to match the tactical theme.",
+    "specifics": {
+      "buttons": "Square or slightly rounded (rounded-sm), high contrast. Primary buttons use bg-[#00E5FF] text-black.",
+      "inputs": "Flat, 1px border, bg-[#121212], focus:border-[#00E5FF] focus:ring-1 focus:ring-[#00E5FF].",
+      "tables": "Dense. border-b border-[#2A2A2A] on rows. Hover effect on rows: hover:bg-[#1A1A1A].",
+      "modals": "Solid bg-[#121212], strict 1px border. Backdrop must be bg-black/80 (high opacity).",
+      "tabs": "Underline style preferred over pills. border-b-2 border-transparent data-[state=active]:border-[#00E5FF]."
+    }
+  },
+  "motion": {
+    "style": "Minimalist, micro-interactions, fast feedback.",
+    "rules": [
+      "No long bouncy animations. State changes should be crisp (150ms).",
+      "Use hover transitions on table rows and file items.",
+      "Use progress indicators (Progress component) for file uploads, simulating real-time chunking.",
+      "Do NOT use transition-all. Be specific (transition-colors, transition-opacity)."
+    ]
+  },
+  "accessibility": {
+    "rules": [
+      "Text contrast must meet APCA standards. Dark grey text on dark backgrounds is forbidden.",
+      "Focus states must be explicitly visible with ring-2.",
+      "All interactive elements MUST include a data-testid attribute (e.g., data-testid='upload-file-button').",
+      "Include aria-labels for icon-only buttons (like delete or download)."
+    ]
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "rationale": "Phosphor provides the crisp, technical look needed for infrastructure and file management.",
+    "installation": "yarn add @phosphor-icons/react"
+  },
+  "image_urls": {
+    "login_background": {
+      "url": "https://images.pexels.com/photos/17485657/pexels-photo-17485657.png?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+      "description": "Abstract data nodes/neural networks. Use as a subtle, low-opacity background for the login screen."
+    },
+    "admin_hero": {
+      "url": "https://images.unsplash.com/photo-1695668548342-c0c1ad479aee?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NjV8MHwxfHNlYXJjaHwzfHxzZXJ2ZXIlMjBpbmZyYXN0cnVjdHVyZSUyMGxpZ2h0c3xlbnwwfHx8fDE3ODQ5MDc4MzF8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Rack of servers. Use in the Admin settings/connections banner if applicable."
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: Do not use HTML-based components for dropdowns, modals, or toasts. Use Shadcn components (DropdownMenu, Dialog).",
+    "CRITICAL: Use Sonner for toast notifications (success/error for uploads, connection tests).",
+    "CRITICAL: Ensure the UI does NOT look like a generic SaaS template. Enforce the dark, stark, technical aesthetic with JetBrains Mono for data.",
+    "CRITICAL: No transparent backgrounds under text. Always use a solid background for dropdowns and sticky headers.",
+    "CRITICAL: Ensure proper z-index layering for modals over the file browser.",
+    "CRITICAL: All buttons, forms, and key elements MUST have data-testid attributes.",
+    "Implement a robust Storage Switcher in the sidebar. Active storage should have a cyan highlight.",
+    "File Browser must include Breadcrumbs for navigation.",
+    "Use a role-based layout: Admin sees dashboard stats & connection management; Regular users see only assigned storages and the file browser."
+  ],
+  "universal_guidelines_for_main_agent": [
+    "Avoid generic 'AI slop' design. Do not center-align the app container.",
+    "Never use generic AI emojis. Use Phosphor icons.",
+    "Ensure crisp edges via semi-transparent borders + solid surfaces.",
+    "Customize scrollbars; NO gutter.",
+    "Every interaction needs micro-animations (hover states, focus).",
+    "Do not use placeholder URLs. Use the provided image_urls."
+  ]
+}
