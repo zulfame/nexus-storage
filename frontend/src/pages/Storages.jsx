@@ -15,6 +15,7 @@ const empty = {
     secret_key: "",
     host: "",
     share: "",
+    port: "445",
     username: "",
     password: "",
     domain: "",
