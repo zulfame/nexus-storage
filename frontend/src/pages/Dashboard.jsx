@@ -1,24 +1,24 @@
 import { useEffect, useState } from "react";
 import api from "@/lib/api";
+import { PageHeader } from "@/components/PageHeader";
 import { HardDrive, Users, Cloud, Server, ShieldCheck } from "lucide-react";
 
-function Stat({ label, value, icon: Icon, accent, testid }) {
+function Stat({ label, value, icon: Icon, accent }) {
   return (
     <div
-      data-testid={testid}
-      className="bg-[#121212] border border-border rounded-xl p-6 relative overflow-hidden"
-      style={{ boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05)" }}
+      data-testid={`stat-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow"
     >
       <div className="flex items-start justify-between">
         <div>
           <div className="overline mb-2">{label}</div>
-          <div className="font-mono font-bold text-4xl tracking-tight">{value}</div>
+          <div className="font-bold text-4xl tracking-tight text-gray-900">{value}</div>
         </div>
         <div
-          className="h-10 w-10 flex items-center justify-center rounded-xl"
-          style={{ background: accent + "22", color: accent }}
+          className="h-11 w-11 flex items-center justify-center rounded-xl"
+          style={{ background: accent + "18", color: accent }}
         >
-          <Icon size={20} />
+          <Icon size={22} />
         </div>
       </div>
     </div>
@@ -35,27 +35,30 @@ export default function Dashboard() {
   const s = stats || {};
 
   return (
-    <div className="p-8">
-      <div className="overline mb-2">Overview</div>
-      <h1 className="font-display font-bold text-4xl tracking-tight mb-8">Dashboard</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4" data-testid="dashboard-stats">
-        <Stat label="Total Storages" value={s.total_storages ?? "—"} icon={HardDrive} accent="#00e5ff" testid="stat-total-storages" />
-        <Stat label="S3 Buckets" value={s.s3_count ?? "—"} icon={Cloud} accent="#34d399" testid="stat-s3" />
-        <Stat label="Samba Shares" value={s.samba_count ?? "—"} icon={Server} accent="#fbbf24" testid="stat-samba" />
-        <Stat label="Users" value={s.total_users ?? "—"} icon={Users} accent="#a78bfa" testid="stat-users" />
-      </div>
-
-      <div className="mt-10 bg-[#121212] border border-border rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-4">
-          <ShieldCheck size={20} className="text-primary" />
-          <h3 className="font-display font-semibold text-xl tracking-tight">Getting Started</h3>
+    <div>
+      <PageHeader overline="Overview" title="Dashboard" />
+      <div className="p-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5" data-testid="dashboard-stats">
+          <Stat label="Total Storages" value={s.total_storages ?? "—"} icon={HardDrive} accent="#2563eb" />
+          <Stat label="S3 Buckets" value={s.s3_count ?? "—"} icon={Cloud} accent="#059669" />
+          <Stat label="Samba Shares" value={s.samba_count ?? "—"} icon={Server} accent="#d97706" />
+          <Stat label="Users" value={s.total_users ?? "—"} icon={Users} accent="#7c3aed" />
         </div>
-        <ol className="text-sm text-gray-300 space-y-2 list-decimal list-inside">
-          <li>Go to <span className="font-mono text-primary">Storages</span> and add an S3 or Samba connection, then test it.</li>
-          <li>Create users under <span className="font-mono text-primary">Users</span> and grant them per-storage access (read or write).</li>
-          <li>Open <span className="font-mono text-primary">File Browser</span> to upload, download, delete files and create folders.</li>
-        </ol>
+
+        <div className="mt-8 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm max-w-3xl">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-9 w-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
+              <ShieldCheck size={18} />
+            </div>
+            <h3 className="font-display font-semibold text-lg tracking-tight text-gray-900">Getting Started</h3>
+          </div>
+          <ol className="text-sm text-gray-600 space-y-2.5 list-decimal list-inside marker:text-blue-500 marker:font-semibold">
+            <li>Open <span className="font-medium text-blue-600">List Storage</span> to add an S3 or Samba connection, then test it.</li>
+            <li>Create users in <span className="font-medium text-blue-600">Manage User</span> and grant per-storage access (read or write).</li>
+            <li>Use <span className="font-medium text-blue-600">File Browser</span> to upload, download, delete files and create folders.</li>
+            <li>Track every change in <span className="font-medium text-blue-600">Logs Activity</span>.</li>
+          </ol>
+        </div>
       </div>
     </div>
   );

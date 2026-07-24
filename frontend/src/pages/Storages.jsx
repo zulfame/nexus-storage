@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
+import { PageHeader } from "@/components/PageHeader";
 import { toast } from "sonner";
 import { Cloud, Server, Plus, Trash2, Pencil, Plug, Loader2 } from "lucide-react";
 
@@ -23,18 +24,25 @@ const empty = {
 function Field({ label, value, onChange, placeholder, type = "text", testid }) {
   return (
     <div>
-      <label className="overline block mb-1.5">{label}</label>
+      <label className="text-sm font-medium text-gray-700 block mb-1.5">{label}</label>
       <input
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         data-testid={testid}
-        className="w-full bg-[#0d0d0d] border border-border rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+        className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
       />
     </div>
   );
 }
+
+const btnPrimary =
+  "flex items-center gap-2 bg-primary text-white font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-blue-700 transition-colors shadow-sm";
+const btnGhost =
+  "text-sm font-medium px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100 transition-colors";
+const btnOutline =
+  "flex items-center gap-1.5 text-sm font-medium border border-gray-200 px-4 py-2 rounded-xl hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors";
 
 export default function Storages() {
   const [storages, setStorages] = useState([]);
@@ -73,20 +81,8 @@ export default function Storages() {
     const c = form.config;
     const config =
       form.type === "s3"
-        ? {
-            region: c.region,
-            endpoint: c.endpoint,
-            bucket: c.bucket,
-            access_key: c.access_key,
-            secret_key: c.secret_key,
-          }
-        : {
-            host: c.host,
-            share: c.share,
-            username: c.username,
-            password: c.password,
-            domain: c.domain,
-          };
+        ? { region: c.region, endpoint: c.endpoint, bucket: c.bucket, access_key: c.access_key, secret_key: c.secret_key }
+        : { host: c.host, share: c.share, username: c.username, password: c.password, domain: c.domain };
     return { name: form.name, type: form.type, config };
   };
 
@@ -129,102 +125,86 @@ export default function Storages() {
   };
 
   return (
-    <div className="p-8">
-      <div className="flex items-end justify-between mb-8">
-        <div>
-          <div className="overline mb-2">Connections</div>
-          <h1 className="font-display font-bold text-4xl tracking-tight">List Storage</h1>
-        </div>
-        <button
-          onClick={openNew}
-          data-testid="add-storage-button"
-          className="flex items-center gap-2 bg-primary text-black font-semibold text-sm px-4 py-2.5 rounded-xl hover:bg-[#00b3cc] transition-colors"
-        >
+    <div>
+      <PageHeader overline="Connections" title="List Storage">
+        <button onClick={openNew} data-testid="add-storage-button" className={btnPrimary}>
           <Plus size={16} /> Add Storage
         </button>
-      </div>
+      </PageHeader>
 
-      {storages.length === 0 ? (
-        <div className="border border-dashed border-border rounded-xl p-16 text-center text-gray-500">
-          No storages yet. Add your first S3 or Samba connection.
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="storages-list">
-          {storages.map((s) => (
-            <div
-              key={s.id}
-              data-testid={`storage-card-${s.id}`}
-              className="bg-[#121212] border border-border rounded-xl p-5 hover:border-[#3a3a3a] transition-colors"
-            >
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-[#1a1a1a] text-primary">
-                    {s.type === "s3" ? <Cloud size={20} /> : <Server size={20} />}
-                  </div>
-                  <div>
-                    <div className="font-semibold text-sm">{s.name}</div>
-                    <div className="overline mt-0.5">{s.type}</div>
+      <div className="p-8">
+        {storages.length === 0 ? (
+          <div className="border border-dashed border-gray-300 rounded-2xl p-16 text-center text-gray-400 bg-white">
+            No storages yet. Add your first S3 or Samba connection.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="storages-list">
+            {storages.map((s) => (
+              <div
+                key={s.id}
+                data-testid={`storage-card-${s.id}`}
+                className="bg-white border border-gray-200 rounded-2xl p-5 shadow-sm hover:shadow-md transition-shadow"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`h-11 w-11 flex items-center justify-center rounded-xl ${s.type === "s3" ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>
+                      {s.type === "s3" ? <Cloud size={22} /> : <Server size={22} />}
+                    </div>
+                    <div>
+                      <div className="font-semibold text-sm text-gray-900">{s.name}</div>
+                      <div className="overline mt-0.5">{s.type}</div>
+                    </div>
                   </div>
                 </div>
+                <div className="text-xs text-gray-500 space-y-1 mb-4 break-all bg-gray-50 rounded-xl p-3">
+                  {s.type === "s3" ? (
+                    <>
+                      <div><span className="text-gray-400">bucket</span> · {s.config.bucket || "—"}</div>
+                      <div><span className="text-gray-400">endpoint</span> · {s.config.endpoint || "aws default"}</div>
+                    </>
+                  ) : (
+                    <>
+                      <div><span className="text-gray-400">host</span> · {s.config.host || "—"}</div>
+                      <div><span className="text-gray-400">share</span> · {s.config.share || "—"}</div>
+                    </>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      const r = await api.post(`/storages/${s.id}/test`);
+                      r.data.success ? toast.success(r.data.message) : toast.error(r.data.message);
+                    }}
+                    data-testid={`test-storage-${s.id}`}
+                    className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-gray-200 py-2 rounded-xl hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+                  >
+                    <Plug size={14} /> Test
+                  </button>
+                  <button onClick={() => openEdit(s)} data-testid={`edit-storage-${s.id}`} aria-label="Edit storage" className="p-2 border border-gray-200 rounded-xl hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                    <Pencil size={14} />
+                  </button>
+                  <button onClick={() => remove(s)} data-testid={`delete-storage-${s.id}`} aria-label="Delete storage" className="p-2 border border-gray-200 rounded-xl hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               </div>
-              <div className="font-mono text-xs text-gray-400 space-y-1 mb-4 break-all">
-                {s.type === "s3" ? (
-                  <>
-                    <div>bucket: {s.config.bucket || "—"}</div>
-                    <div>endpoint: {s.config.endpoint || "aws default"}</div>
-                  </>
-                ) : (
-                  <>
-                    <div>host: {s.config.host || "—"}</div>
-                    <div>share: {s.config.share || "—"}</div>
-                  </>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={async () => {
-                    const r = await api.post(`/storages/${s.id}/test`);
-                    r.data.success ? toast.success(r.data.message) : toast.error(r.data.message);
-                  }}
-                  data-testid={`test-storage-${s.id}`}
-                  className="flex-1 flex items-center justify-center gap-1.5 text-xs font-medium border border-border py-1.5 rounded-xl hover:border-primary hover:text-primary transition-colors"
-                >
-                  <Plug size={14} /> Test
-                </button>
-                <button
-                  onClick={() => openEdit(s)}
-                  data-testid={`edit-storage-${s.id}`}
-                  aria-label="Edit storage"
-                  className="p-1.5 border border-border rounded-xl hover:text-primary hover:border-primary transition-colors"
-                >
-                  <Pencil size={14} />
-                </button>
-                <button
-                  onClick={() => remove(s)}
-                  data-testid={`delete-storage-${s.id}`}
-                  aria-label="Delete storage"
-                  className="p-1.5 border border-border rounded-xl hover:text-destructive hover:border-destructive transition-colors"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
 
       {open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#121212] border border-border rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto" data-testid="storage-dialog">
-            <div className="p-6 border-b border-border">
-              <h3 className="font-display font-bold text-xl tracking-tight">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-2xl" data-testid="storage-dialog">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="font-display font-bold text-xl tracking-tight text-gray-900">
                 {editId ? "Edit Storage" : "Add Storage"}
               </h3>
             </div>
             <div className="p-6 space-y-4">
               <Field label="Name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="My Bucket" testid="storage-name-input" />
               <div>
-                <label className="overline block mb-1.5">Type</label>
+                <label className="text-sm font-medium text-gray-700 block mb-1.5">Type</label>
                 <div className="flex gap-2">
                   {["s3", "samba"].map((t) => (
                     <button
@@ -232,9 +212,7 @@ export default function Storages() {
                       onClick={() => setForm((f) => ({ ...f, type: t }))}
                       data-testid={`storage-type-${t}`}
                       className={`flex-1 py-2 text-sm font-medium rounded-xl border transition-colors ${
-                        form.type === t
-                          ? "border-primary text-primary bg-[#00e5ff11]"
-                          : "border-border text-gray-400 hover:text-white"
+                        form.type === t ? "border-primary text-blue-700 bg-blue-50" : "border-gray-200 text-gray-500 hover:bg-gray-50"
                       }`}
                     >
                       {t === "s3" ? "S3 / Compatible" : "Samba / SMB"}
@@ -261,29 +239,13 @@ export default function Storages() {
                 </>
               )}
             </div>
-            <div className="p-6 border-t border-border flex items-center gap-2">
-              <button
-                onClick={test}
-                disabled={testing}
-                data-testid="test-connection-button"
-                className="flex items-center gap-1.5 text-sm font-medium border border-border px-4 py-2 rounded-xl hover:border-primary hover:text-primary transition-colors disabled:opacity-60"
-              >
+            <div className="p-6 border-t border-gray-100 flex items-center gap-2">
+              <button onClick={test} disabled={testing} data-testid="test-connection-button" className={btnOutline + " disabled:opacity-60"}>
                 {testing ? <Loader2 size={15} className="animate-spin" /> : <Plug size={15} />} Test
               </button>
               <div className="flex-1" />
-              <button
-                onClick={() => setOpen(false)}
-                data-testid="cancel-storage-button"
-                className="text-sm font-medium px-4 py-2 rounded-xl text-gray-400 hover:text-white transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={save}
-                disabled={saving}
-                data-testid="save-storage-button"
-                className="flex items-center gap-1.5 bg-primary text-black font-semibold text-sm px-5 py-2 rounded-xl hover:bg-[#00b3cc] transition-colors disabled:opacity-60"
-              >
+              <button onClick={() => setOpen(false)} data-testid="cancel-storage-button" className={btnGhost}>Cancel</button>
+              <button onClick={save} disabled={saving} data-testid="save-storage-button" className={btnPrimary + " disabled:opacity-60"}>
                 {saving && <Loader2 size={15} className="animate-spin" />}
                 {editId ? "Save" : "Add"}
               </button>

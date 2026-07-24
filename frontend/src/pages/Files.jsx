@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import api, { API, apiError } from "@/lib/api";
+import api, { apiError } from "@/lib/api";
 import { toast } from "sonner";
 import {
   Cloud,
@@ -26,6 +26,11 @@ function fmtSize(n) {
   }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
 }
+
+const btnPrimary =
+  "flex items-center gap-1.5 bg-primary text-white font-semibold text-sm px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-60";
+const btnOutline =
+  "flex items-center gap-1.5 text-sm font-medium border border-gray-200 px-3 py-2 rounded-xl hover:border-blue-300 hover:text-blue-600 hover:bg-blue-50 transition-colors";
 
 export default function Files() {
   const [storages, setStorages] = useState([]);
@@ -105,10 +110,7 @@ export default function Files() {
 
   const download = async (item) => {
     try {
-      const res = await api.get(`/storages/${active.id}/files/download`, {
-        params: { path: item.path },
-        responseType: "blob",
-      });
+      const res = await api.get(`/storages/${active.id}/files/download`, { params: { path: item.path }, responseType: "blob" });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
@@ -123,9 +125,7 @@ export default function Files() {
   const remove = async (item) => {
     if (!window.confirm(`Delete ${item.is_dir ? "folder" : "file"} "${item.name}"?`)) return;
     try {
-      await api.delete(`/storages/${active.id}/files`, {
-        params: { path: item.path, is_dir: item.is_dir },
-      });
+      await api.delete(`/storages/${active.id}/files`, { params: { path: item.path, is_dir: item.is_dir } });
       toast.success("Deleted");
       loadFiles(path);
     } catch (e) {
@@ -147,32 +147,28 @@ export default function Files() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-0px)]">
       {/* storage switcher */}
-      <div className="w-64 shrink-0 border-r border-border bg-[#0d0d0d] p-4">
-        <div className="overline mb-3 px-1">Storages</div>
-        {storages.length === 0 && (
-          <p className="text-xs text-gray-500 px-1">No storages assigned.</p>
-        )}
-        <div className="space-y-1" data-testid="storage-switcher">
+      <div className="lg:w-64 lg:shrink-0 lg:h-screen lg:sticky lg:top-0 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white">
+        <div className="px-4 pt-4 pb-2 overline">Storages</div>
+        {storages.length === 0 && <p className="text-xs text-gray-400 px-4 pb-4">No storages assigned.</p>}
+        <div className="flex lg:flex-col gap-2 px-3 pb-3 overflow-x-auto lg:overflow-visible" data-testid="storage-switcher">
           {storages.map((s) => (
             <button
               key={s.id}
               onClick={() => setActive(s)}
               data-testid={`switch-storage-${s.id}`}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-colors border ${
-                active?.id === s.id
-                  ? "border-primary bg-[#00e5ff11] text-primary"
-                  : "border-transparent text-gray-400 hover:text-white hover:bg-[#161616]"
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-colors border whitespace-nowrap shrink-0 lg:w-full ${
+                active?.id === s.id ? "border-primary bg-blue-50 text-blue-700" : "border-transparent text-gray-600 hover:bg-gray-100"
               }`}
             >
               {s.type === "s3" ? <Cloud size={16} /> : <Server size={16} />}
               <span className="flex-1 truncate">{s.name}</span>
               <span
-                className="text-[9px] font-mono uppercase tracking-wide px-1.5 py-0.5 rounded"
+                className="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded"
                 style={{
-                  background: s.permission === "write" ? "#34d39922" : "#00e5ff22",
-                  color: s.permission === "write" ? "#34d399" : "#00e5ff",
+                  background: s.permission === "write" ? "#05966918" : "#2563eb18",
+                  color: s.permission === "write" ? "#059669" : "#2563eb",
                 }}
               >
                 {s.permission}
@@ -183,27 +179,23 @@ export default function Files() {
       </div>
 
       {/* browser */}
-      <div className="flex-1 p-8 min-w-0">
+      <div className="flex-1 min-w-0">
         {!active ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-500">
+          <div className="flex flex-col items-center justify-center h-96 text-gray-400">
             <HardDrive size={40} className="mb-4 opacity-40" />
             <p className="text-sm">Select or ask an admin to assign a storage.</p>
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-              <div className="flex items-center gap-1.5 text-sm font-mono flex-wrap min-w-0" data-testid="breadcrumbs">
-                <button onClick={() => goTo("")} className="text-primary hover:underline">
-                  {active.name}
-                </button>
+            <header className="sticky top-0 lg:top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 text-sm flex-wrap min-w-0" data-testid="breadcrumbs">
+                <button onClick={() => goTo("")} className="font-semibold text-blue-600 hover:underline">{active.name}</button>
                 {crumbs.map((c, i) => {
                   const p = crumbs.slice(0, i + 1).join("/");
                   return (
-                    <span key={p} className="flex items-center gap-1.5 text-gray-400">
-                      <ChevronRight size={13} className="text-gray-600" />
-                      <button onClick={() => goTo(p)} className="hover:text-white">
-                        {c}
-                      </button>
+                    <span key={p} className="flex items-center gap-1.5 text-gray-500">
+                      <ChevronRight size={13} className="text-gray-300" />
+                      <button onClick={() => goTo(p)} className="hover:text-gray-900">{c}</button>
                     </span>
                   );
                 })}
@@ -211,115 +203,77 @@ export default function Files() {
 
               {canWrite && (
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setNewFolder(true)}
-                    data-testid="new-folder-button"
-                    className="flex items-center gap-1.5 text-sm font-medium border border-border px-3 py-2 rounded-xl hover:border-primary hover:text-primary transition-colors"
-                  >
-                    <FolderPlus size={15} /> Folder
+                  <button onClick={() => setNewFolder(true)} data-testid="new-folder-button" className={btnOutline}>
+                    <FolderPlus size={15} /> <span className="hidden sm:inline">Folder</span>
                   </button>
-                  <button
-                    onClick={() => fileInput.current?.click()}
-                    disabled={uploading}
-                    data-testid="upload-file-button"
-                    className="flex items-center gap-1.5 bg-primary text-black font-semibold text-sm px-4 py-2 rounded-xl hover:bg-[#00b3cc] transition-colors disabled:opacity-60"
-                  >
-                    {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
-                    Upload
+                  <button onClick={() => fileInput.current?.click()} disabled={uploading} data-testid="upload-file-button" className={btnPrimary}>
+                    {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />} Upload
                   </button>
                   <input ref={fileInput} type="file" onChange={onUpload} className="hidden" data-testid="file-input" />
                 </div>
               )}
-            </div>
+            </header>
 
-            <div className="border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-[#0d0d0d] text-left">
-                    <th className="px-4 py-2.5 overline">Name</th>
-                    <th className="px-4 py-2.5 overline w-32">Size</th>
-                    <th className="px-4 py-2.5 overline w-28 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody data-testid="file-list">
-                  {loading ? (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-12 text-center text-gray-500">
-                        <Loader2 size={18} className="animate-spin inline" />
-                      </td>
-                    </tr>
-                  ) : items.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-12 text-center text-gray-500 text-sm">
-                        This folder is empty.
-                      </td>
-                    </tr>
-                  ) : (
-                    items.map((item) => (
-                      <tr
-                        key={item.path}
-                        className="border-t border-border hover:bg-[#151515] transition-colors group"
-                        data-testid={`file-row-${item.name}`}
-                      >
-                        <td className="px-4 py-2.5">
-                          <button
-                            onClick={() => enter(item)}
-                            disabled={!item.is_dir}
-                            className={`flex items-center gap-2.5 font-mono ${item.is_dir ? "hover:text-primary" : "cursor-default"}`}
-                          >
-                            {item.is_dir ? (
-                              <Folder size={16} className="text-primary shrink-0" />
-                            ) : (
-                              <FileIcon size={16} className="text-gray-500 shrink-0" />
-                            )}
-                            <span className="truncate">{item.name}</span>
-                          </button>
-                        </td>
-                        <td className="px-4 py-2.5 font-mono text-gray-400">
-                          {item.is_dir ? "—" : fmtSize(item.size)}
-                        </td>
-                        <td className="px-4 py-2.5">
-                          <div className="flex items-center justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            {!item.is_dir && (
-                              <button
-                                onClick={() => download(item)}
-                                data-testid={`download-${item.name}`}
-                                aria-label="Download"
-                                className="p-1.5 border border-border rounded-xl hover:text-primary hover:border-primary transition-colors"
-                              >
-                                <Download size={14} />
-                              </button>
-                            )}
-                            {canWrite && (
-                              <button
-                                onClick={() => remove(item)}
-                                data-testid={`delete-file-${item.name}`}
-                                aria-label="Delete"
-                                className="p-1.5 border border-border rounded-xl hover:text-destructive hover:border-destructive transition-colors"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                            )}
-                          </div>
-                        </td>
+            <div className="p-4 sm:p-6">
+              <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm min-w-[520px]">
+                    <thead>
+                      <tr className="bg-gray-50 text-left border-b border-gray-200">
+                        <th className="px-4 py-2.5 overline">Name</th>
+                        <th className="px-4 py-2.5 overline w-32">Size</th>
+                        <th className="px-4 py-2.5 overline w-28 text-right">Actions</th>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    </thead>
+                    <tbody data-testid="file-list">
+                      {loading ? (
+                        <tr><td colSpan={3} className="px-4 py-12 text-center text-gray-400"><Loader2 size={18} className="animate-spin inline" /></td></tr>
+                      ) : items.length === 0 ? (
+                        <tr><td colSpan={3} className="px-4 py-16 text-center text-gray-400 text-sm">This folder is empty.</td></tr>
+                      ) : (
+                        items.map((item) => (
+                          <tr key={item.path} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors group" data-testid={`file-row-${item.name}`}>
+                            <td className="px-4 py-2.5">
+                              <button onClick={() => enter(item)} disabled={!item.is_dir} className={`flex items-center gap-2.5 ${item.is_dir ? "hover:text-blue-600 text-gray-800" : "cursor-default text-gray-700"}`}>
+                                {item.is_dir ? <Folder size={17} className="text-blue-500 shrink-0" fill="#dbeafe" /> : <FileIcon size={17} className="text-gray-400 shrink-0" />}
+                                <span className="truncate">{item.name}</span>
+                              </button>
+                            </td>
+                            <td className="px-4 py-2.5 text-gray-500">{item.is_dir ? "—" : fmtSize(item.size)}</td>
+                            <td className="px-4 py-2.5">
+                              <div className="flex items-center justify-end gap-1.5 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                                {!item.is_dir && (
+                                  <button onClick={() => download(item)} data-testid={`download-${item.name}`} aria-label="Download" className="p-1.5 border border-gray-200 rounded-lg hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50 transition-colors">
+                                    <Download size={14} />
+                                  </button>
+                                )}
+                                {canWrite && (
+                                  <button onClick={() => remove(item)} data-testid={`delete-file-${item.name}`} aria-label="Delete" className="p-1.5 border border-gray-200 rounded-lg hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors">
+                                    <Trash2 size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </>
         )}
       </div>
 
       {newFolder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="bg-[#121212] border border-border rounded-xl w-full max-w-sm" data-testid="folder-dialog">
-            <div className="p-6 border-b border-border">
-              <h3 className="font-display font-bold text-xl tracking-tight">New Folder</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-gray-200 rounded-2xl w-full max-w-sm shadow-2xl" data-testid="folder-dialog">
+            <div className="p-6 border-b border-gray-100">
+              <h3 className="font-display font-bold text-xl tracking-tight text-gray-900">New Folder</h3>
             </div>
             <div className="p-6">
-              <label className="overline block mb-1.5">Folder name</label>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Folder name</label>
               <input
                 autoFocus
                 value={folderName}
@@ -327,12 +281,12 @@ export default function Files() {
                 onKeyDown={(e) => e.key === "Enter" && createFolder()}
                 data-testid="folder-name-input"
                 placeholder="new-folder"
-                className="w-full bg-[#0d0d0d] border border-border rounded-xl px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
               />
             </div>
-            <div className="p-6 border-t border-border flex justify-end gap-2">
-              <button onClick={() => setNewFolder(false)} className="text-sm font-medium px-4 py-2 rounded-xl text-gray-400 hover:text-white">Cancel</button>
-              <button onClick={createFolder} data-testid="create-folder-button" className="bg-primary text-black font-semibold text-sm px-5 py-2 rounded-xl hover:bg-[#00b3cc] transition-colors">Create</button>
+            <div className="p-6 border-t border-gray-100 flex justify-end gap-2">
+              <button onClick={() => setNewFolder(false)} className="text-sm font-medium px-4 py-2 rounded-xl text-gray-600 hover:bg-gray-100">Cancel</button>
+              <button onClick={createFolder} data-testid="create-folder-button" className="bg-primary text-white font-semibold text-sm px-5 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm">Create</button>
             </div>
           </div>
         </div>

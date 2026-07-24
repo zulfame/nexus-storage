@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { apiError } from "@/lib/api";
-import { Database, Loader2 } from "lucide-react";
+import { Database, Loader2, HardDrive, Cloud, Server } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Login() {
@@ -27,41 +27,48 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex bg-[#0a0a0a]">
-      <div
-        className="hidden lg:flex flex-1 relative border-r border-border items-end p-12 bg-cover bg-center"
-        style={{
-          backgroundImage:
-            "linear-gradient(to top, rgba(10,10,10,0.95), rgba(10,10,10,0.4)), url('https://images.pexels.com/photos/17485657/pexels-photo-17485657.png?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940')",
-        }}
-      >
-        <div>
-          <div className="overline mb-3">Multi-Storage Control Plane</div>
-          <h1 className="font-display font-extrabold text-5xl leading-[1.05] tracking-tight max-w-md">
-            Manage S3 &amp; Samba from one command center.
+    <div className="min-h-screen flex bg-[#f6f8fc]">
+      <div className="hidden lg:flex flex-1 relative items-center justify-center p-16 bg-gradient-to-br from-blue-600 to-indigo-700 overflow-hidden">
+        <div className="absolute inset-0 opacity-20" style={{ backgroundImage: "radial-gradient(circle at 20% 30%, white 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
+        <div className="relative max-w-md text-white">
+          <div className="flex items-center gap-2.5 mb-10">
+            <div className="h-10 w-10 bg-white/15 backdrop-blur rounded-xl flex items-center justify-center">
+              <Database size={22} className="text-white" strokeWidth={2.5} />
+            </div>
+            <span className="font-display font-bold text-xl tracking-tight">NEXUS STORAGE</span>
+          </div>
+          <h1 className="font-display font-extrabold text-5xl leading-[1.08] tracking-tight">
+            All your storage, one clean workspace.
           </h1>
-          <p className="text-gray-400 mt-4 max-w-sm text-sm">
-            Connect object storage and network shares, control per-user access, and browse
-            files — all in a single tactical interface.
+          <p className="text-blue-100 mt-5 text-base leading-relaxed">
+            Connect S3 buckets and Samba shares, control who can access what, and manage files
+            with a familiar drive-like experience.
           </p>
+          <div className="flex gap-6 mt-10">
+            {[{ i: Cloud, t: "AWS S3" }, { i: HardDrive, t: "MinIO / Wasabi" }, { i: Server, t: "Samba / SMB" }].map(({ i: Ic, t }) => (
+              <div key={t} className="flex items-center gap-2 text-sm text-blue-50">
+                <Ic size={18} /> {t}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="w-full lg:w-[480px] flex items-center justify-center p-8">
         <div className="w-full max-w-sm">
-          <div className="flex items-center gap-2.5 mb-10">
+          <div className="lg:hidden flex items-center gap-2.5 mb-10">
             <div className="h-9 w-9 bg-primary flex items-center justify-center rounded-xl">
-              <Database size={20} className="text-black" strokeWidth={2.5} />
+              <Database size={20} className="text-white" strokeWidth={2.5} />
             </div>
-            <span className="font-display font-bold text-xl tracking-tight">NEXUS STORAGE</span>
+            <span className="font-display font-bold text-xl tracking-tight text-gray-900">NEXUS STORAGE</span>
           </div>
 
-          <div className="overline mb-2">Authenticate</div>
-          <h2 className="font-display font-bold text-3xl tracking-tight mb-8">Sign in</h2>
+          <h2 className="font-display font-bold text-3xl tracking-tight mb-1 text-gray-900">Welcome back</h2>
+          <p className="text-gray-500 text-sm mb-8">Sign in to your storage workspace.</p>
 
           <form onSubmit={submit} className="space-y-5">
             <div>
-              <label className="overline block mb-2">Email</label>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Email</label>
               <input
                 type="email"
                 required
@@ -69,11 +76,11 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 data-testid="login-email-input"
                 placeholder="admin@example.com"
-                className="w-full bg-[#121212] border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
               />
             </div>
             <div>
-              <label className="overline block mb-2">Password</label>
+              <label className="text-sm font-medium text-gray-700 block mb-1.5">Password</label>
               <input
                 type="password"
                 required
@@ -81,17 +88,17 @@ export default function Login() {
                 onChange={(e) => setPassword(e.target.value)}
                 data-testid="login-password-input"
                 placeholder="••••••••"
-                className="w-full bg-[#121212] border border-border rounded-xl px-3 py-2.5 text-sm font-mono outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
+                className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
               data-testid="login-submit-button"
-              className="w-full bg-primary text-black font-semibold text-sm py-2.5 rounded-xl hover:bg-[#00b3cc] transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+              className="w-full bg-primary text-white font-semibold text-sm py-2.5 rounded-xl hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-60 shadow-sm"
             >
               {loading && <Loader2 size={16} className="animate-spin" />}
-              {loading ? "Authenticating…" : "Sign in"}
+              {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
         </div>
