@@ -399,12 +399,12 @@ async def update_access(user_id: str, body: AccessUpdate, admin: dict = Depends(
 
 # ---------------------------------------------------------------- storage routes
 @api_router.get("/storages")
-async def list_storages(user: dict = Depends(get_current_user)):
+async def list_storages(include_inaccessible: bool = False, user: dict = Depends(get_current_user)):
     docs = await db.storages.find().sort("created_at", 1).to_list(1000)
     result = []
     for doc in docs:
         perm = user_permission_for(user, str(doc["_id"]))
-        if perm is None:
+        if perm is None and not include_inaccessible:
             continue
         pub = storage_public(doc)
         pub["permission"] = perm

@@ -8,6 +8,7 @@ import { ShareDialog } from "@/components/ShareDialog";
 import { BulkShareDialog } from "@/components/BulkShareDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DownloadManager } from "@/components/DownloadManager";
+import { PageHeader } from "@/components/PageHeader";
 import { ThumbImage } from "@/components/ThumbImage";
 import { fileMeta, isPreviewable, categoryOf } from "@/lib/fileTypes";
 import { toast } from "sonner";
@@ -39,6 +40,8 @@ import {
   X,
   CheckSquare,
   Minus,
+  ArrowLeft,
+  Lock,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -74,11 +77,12 @@ function fmtDate(iso) {
     ", " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
-function storageIcon(type, size = 16) {
-  if (type === "s3") return <Cloud size={size} />;
-  if (type === "sftp") return <HardDrive size={size} />;
-  return <Server size={size} />;
-}
+const STORAGE_META = {
+  s3: { icon: Cloud, box: "bg-emerald-50 text-emerald-600", label: "S3 / Compatible" },
+  sftp: { icon: HardDrive, box: "bg-violet-50 text-violet-600", label: "SFTP" },
+  samba: { icon: Server, box: "bg-amber-50 text-amber-600", label: "Samba / SMB" },
+};
+const storageMeta = (t) => STORAGE_META[t] || STORAGE_META.samba;
 
 const btnPrimary =
   "flex items-center gap-1.5 bg-primary text-white font-semibold text-sm px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-60";
@@ -139,9 +143,8 @@ export default function Files() {
   };
 
   useEffect(() => {
-    api.get("/storages").then((r) => {
+    api.get("/storages", { params: { include_inaccessible: true } }).then((r) => {
       setStorages(r.data);
-      if (r.data.length) setActive(r.data[0]);
     });
   }, []);
 
@@ -406,53 +409,96 @@ export default function Files() {
   );
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-0px)]">
-      {/* storage switcher */}
-      <div className="lg:w-64 lg:shrink-0 lg:h-screen lg:sticky lg:top-0 border-b lg:border-b-0 lg:border-r border-gray-200 bg-white">
-        <div className="px-4 pt-4 pb-2 overline">Storages</div>
-        {storages.length === 0 && <p className="text-xs text-gray-400 px-4 pb-4">No storages assigned.</p>}
-        <div className="flex lg:flex-col gap-2 px-3 pb-3 overflow-x-auto lg:overflow-visible" data-testid="storage-switcher">
-          {storages.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setActive(s)}
-              data-testid={`switch-storage-${s.id}`}
-              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm text-left transition-colors border whitespace-nowrap shrink-0 lg:w-full ${
-                active?.id === s.id ? "border-primary bg-blue-50 text-blue-700" : "border-transparent text-gray-600 hover:bg-gray-100"
-              }`}
-            >
-              {storageIcon(s.type)}
-              <span className="flex-1 truncate">{s.name}</span>
-              <span
-                className="text-[9px] font-medium uppercase tracking-wide px-1.5 py-0.5 rounded"
-                style={{
-                  background: s.permission === "write" ? "#05966918" : "#2563eb18",
-                  color: s.permission === "write" ? "#059669" : "#2563eb",
-                }}
+    <div>
+      {!active ? (
+        <>
+          <PageHeader overline="Browse" title="File Browser" />
+          <div className="p-4 sm:p-8">
+            {storages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-96 text-gray-400">
+                <HardDrive size={40} className="mb-4 opacity-40" />
+                <p className="text-sm">No storages available yet.</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-sm text-gray-500 mb-6">Select a storage to browse and manage its files.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" data-testid="storage-picker">
+                  {storages.map((s) => {
+                    const accessible = !!s.permission;
+                    const M = storageMeta(s.type);
+                    const Ic = M.icon;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={!accessible}
+                        onClick={() => accessible && setActive(s)}
+                        data-testid={`storage-card-${s.id}`}
+                        aria-disabled={!accessible}
+                        className={`group relative text-left rounded-2xl p-5 border transition-all duration-200 ${
+                          accessible
+                            ? "bg-white border-gray-200 shadow-sm hover:shadow-lg hover:border-blue-200 hover:-translate-y-0.5 cursor-pointer"
+                            : "bg-gray-50 border-gray-200 cursor-not-allowed"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <div className={`h-12 w-12 flex items-center justify-center rounded-xl shrink-0 transition-transform ${accessible ? `${M.box} group-hover:scale-105` : "bg-gray-200 text-gray-400"}`}>
+                            <Ic size={24} />
+                          </div>
+                          {accessible ? (
+                            <span
+                              className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md"
+                              style={{
+                                background: s.permission === "write" ? "#05966918" : "#2563eb18",
+                                color: s.permission === "write" ? "#059669" : "#2563eb",
+                              }}
+                            >
+                              {s.permission}
+                            </span>
+                          ) : (
+                            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md bg-gray-200 text-gray-500">
+                              <Lock size={11} /> No access
+                            </span>
+                          )}
+                        </div>
+                        <div className={`font-semibold text-sm truncate ${accessible ? "text-gray-900" : "text-gray-500"}`}>{s.name}</div>
+                        <div className="text-xs text-gray-400 mt-0.5">{M.label}</div>
+                        <div className={`mt-4 pt-3 border-t text-xs ${accessible ? "border-gray-100 text-gray-500" : "border-gray-200 text-gray-400"}`}>
+                          {s.usage ? (
+                            <span>
+                              <span className="font-semibold text-gray-700">{fmtSize(s.usage.total_size)}</span>
+                              <span className="text-gray-400"> · {s.usage.file_count} files</span>
+                            </span>
+                          ) : accessible ? (
+                            <span className="inline-flex items-center gap-1.5 text-blue-600 font-medium">
+                              <FolderOpen size={13} /> Open browser
+                            </span>
+                          ) : (
+                            <span>Ask an admin for access</span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        </>
+      ) : (
+        <>
+          <header className="sticky top-0 lg:top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center gap-3">
+              <button
+                onClick={() => { setActive(null); setPath(""); setQuery(""); clearSelection(); }}
+                data-testid="back-to-storages"
+                aria-label="Back to storages"
+                className="shrink-0 h-8 w-8 flex items-center justify-center rounded-lg text-gray-500 hover:text-gray-900 hover:bg-gray-100 transition-colors"
               >
-                {s.permission}
+                <ArrowLeft size={18} />
+              </button>
+              <span className={`shrink-0 h-8 w-8 rounded-lg hidden sm:flex items-center justify-center ${storageMeta(active.type).box}`}>
+                {(() => { const Ic = storageMeta(active.type).icon; return <Ic size={16} />; })()}
               </span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* browser */}
-      <div className="flex-1 min-w-0">
-        {!active ? (
-          <>
-            <header className="sticky top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-gray-700">File Browser</div>
-              <UserMenu />
-            </header>
-            <div className="flex flex-col items-center justify-center h-96 text-gray-400">
-              <HardDrive size={40} className="mb-4 opacity-40" />
-              <p className="text-sm">No storage assigned yet. Ask an admin to grant you access.</p>
-            </div>
-          </>
-        ) : (
-          <>
-            <header className="sticky top-0 lg:top-0 z-10 bg-white/90 backdrop-blur border-b border-gray-200 shadow-[0_2px_14px_rgba(15,23,42,0.06)] px-4 sm:px-6 py-3.5 flex items-center gap-3">
               <div className="flex items-center gap-1.5 text-sm min-w-0 flex-1 overflow-hidden" data-testid="breadcrumbs">
                 <button onClick={() => goTo("")} className="font-semibold text-blue-600 hover:underline shrink-0 max-w-[40vw] sm:max-w-[220px] truncate">{active.name}</button>
                 {(() => {
@@ -771,7 +817,6 @@ export default function Files() {
             </div>
           </>
         )}
-      </div>
 
       {preview && (
         <FilePreview
@@ -820,7 +865,7 @@ export default function Files() {
       {moveCopy && active && (
         <MoveCopyDialog
           sourceStorageId={active.id}
-          storages={storages}
+          storages={storages.filter((s) => s.permission)}
           item={moveCopy.item}
           mode={moveCopy.mode}
           onClose={() => setMoveCopy(null)}
@@ -835,7 +880,7 @@ export default function Files() {
       {bulkMoveCopy && active && selCount > 0 && (
         <MoveCopyDialog
           sourceStorageId={active.id}
-          storages={storages}
+          storages={storages.filter((s) => s.permission)}
           items={selectedItems}
           mode={bulkMoveCopy}
           onClose={() => setBulkMoveCopy(null)}

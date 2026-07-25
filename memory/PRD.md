@@ -168,6 +168,20 @@ config, README env-var table).
 - Verified: self-tested via screenshot on live STAGING S3 — delete confirm modal renders correctly;
   download panel shows "Downloading 1 file" with progress bar/% (throttled to confirm progress UI).
 
+## Implemented (2026-06, fork: File Browser storage picker redesign)
+- **Storage picker landing**: File Browser now opens on a full-width card grid (like List Storage)
+  instead of an internal storage sidebar. Selecting a card enters a full-width file-management view
+  with a back-arrow (back-to-storages) + storage icon/name in the header. Removes the cramped
+  left "STORAGES" column → more room for files.
+- **Show all storages with access state**: GET `/api/storages?include_inaccessible=true` returns every
+  storage (permission null for those without access). Accessible cards are colored/clickable with a
+  READ/WRITE badge; inaccessible cards are grayed/disabled with a lock "NO ACCESS" badge and
+  "Ask an admin for access". Default `/storages` behavior unchanged (accessible-only) for other pages.
+- MoveCopyDialog destination list filtered to accessible storages only.
+- Verified: self-tested via screenshot on live S3 — admin sees 2 accessible cards + enters browser
+  full-width with working back button; a temp read-only user correctly sees 1 colored card + 1
+  grayed/disabled NO-ACCESS card (temp user cleaned up afterward).
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).
