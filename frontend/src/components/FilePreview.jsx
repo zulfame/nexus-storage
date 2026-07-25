@@ -1,9 +1,18 @@
 import { useEffect, useState } from "react";
 import api, { apiError } from "@/lib/api";
 import { X, Download, Loader2, AlertCircle } from "lucide-react";
-import { fileMeta, categoryOf } from "@/lib/fileTypes";
+import { fileMeta, categoryOf, extOf } from "@/lib/fileTypes";
 
 const MAX_PREVIEW_BYTES = 25 * 1024 * 1024; // 25 MB
+
+const MIME = {
+  pdf: "application/pdf",
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", svg: "image/svg+xml", bmp: "image/bmp", ico: "image/x-icon", avif: "image/avif",
+  mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mkv: "video/x-matroska",
+  avi: "video/x-msvideo", m4v: "video/mp4", wmv: "video/x-ms-wmv",
+  mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", flac: "audio/flac", aac: "audio/aac", m4a: "audio/mp4",
+};
 
 export function FilePreview({ storageId, item, onClose, onDownload }) {
   const [state, setState] = useState({ loading: true, error: "", kind: "", url: "", text: "", html: "", sheets: null });
