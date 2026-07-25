@@ -4,6 +4,7 @@ import { UserMenu } from "@/components/UserMenu";
 import { FilePreview } from "@/components/FilePreview";
 import { UploadDialog } from "@/components/UploadDialog";
 import { MoveCopyDialog } from "@/components/MoveCopyDialog";
+import { ShareDialog } from "@/components/ShareDialog";
 import { ThumbImage } from "@/components/ThumbImage";
 import { fileMeta, isPreviewable, categoryOf } from "@/lib/fileTypes";
 import { toast } from "sonner";
@@ -31,6 +32,7 @@ import {
   ArrowUp,
   ArrowDown,
   ChevronsUpDown,
+  Share2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -94,6 +96,7 @@ export default function Files() {
   const [renameItem, setRenameItem] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [moveCopy, setMoveCopy] = useState(null); // { item, mode }
+  const [shareItem, setShareItem] = useState(null);
   const [sort, setSort] = useState({ key: "name", dir: "asc" });
   const reqId = useRef(0);
 
@@ -281,6 +284,7 @@ export default function Files() {
               <ContextMenuItem onClick={() => setPreview(item)} data-testid={`ctx-preview-${item.name}`} className="cursor-pointer"><Eye size={15} className="mr-2 text-gray-500" /> Preview</ContextMenuItem>
             )}
             <ContextMenuItem onClick={() => download(item)} data-testid={`ctx-download-${item.name}`} className="cursor-pointer"><Download size={15} className="mr-2 text-gray-500" /> Download</ContextMenuItem>
+            <ContextMenuItem onClick={() => setShareItem(item)} data-testid={`ctx-share-${item.name}`} className="cursor-pointer"><Share2 size={15} className="mr-2 text-gray-500" /> Share…</ContextMenuItem>
           </>
         )}
         {canWrite && (
@@ -572,6 +576,7 @@ export default function Files() {
                                         </button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="w-44">
+                                        {!item.is_dir && <DropdownMenuItem onClick={() => setShareItem(item)} className="cursor-pointer"><Share2 size={14} className="mr-2 text-gray-500" /> Share…</DropdownMenuItem>}
                                         <DropdownMenuItem onClick={() => openRename(item)} className="cursor-pointer"><Pencil size={14} className="mr-2 text-gray-500" /> Rename</DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => setMoveCopy({ item, mode: "move" })} className="cursor-pointer"><FolderInput size={14} className="mr-2 text-gray-500" /> Move to…</DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => setMoveCopy({ item, mode: "copy" })} className="cursor-pointer"><CopyIcon size={14} className="mr-2 text-gray-500" /> Copy to…</DropdownMenuItem>
@@ -641,12 +646,17 @@ export default function Files() {
       )}
       {moveCopy && active && (
         <MoveCopyDialog
-          storageId={active.id}
+          sourceStorageId={active.id}
+          storages={storages}
           item={moveCopy.item}
           mode={moveCopy.mode}
           onClose={() => setMoveCopy(null)}
           onDone={() => loadFiles(path)}
         />
+      )}
+
+      {shareItem && active && (
+        <ShareDialog storageId={active.id} item={shareItem} onClose={() => setShareItem(null)} />
       )}
 
       {renameItem && (

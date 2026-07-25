@@ -3,7 +3,15 @@ import { Link } from "react-router-dom";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { metaFor, relTime } from "@/lib/logMeta";
-import { HardDrive, Users, Cloud, Server, Activity, ArrowRight, ShieldCheck } from "lucide-react";
+import { HardDrive, Users, Cloud, Server, Activity, ArrowRight, ShieldCheck, Share2, Database } from "lucide-react";
+
+function fmtBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0, v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+}
 
 function Stat({ label, value, icon: Icon, accent }) {
   return (
@@ -53,8 +61,8 @@ export default function Dashboard() {
       <div className="p-4 sm:p-8 space-y-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Stat label="Total Storages" value={s.total_storages ?? "—"} icon={HardDrive} accent="#2563eb" />
-          <Stat label="S3 Buckets" value={s.s3_count ?? "—"} icon={Cloud} accent="#059669" />
-          <Stat label="Samba Shares" value={s.samba_count ?? "—"} icon={Server} accent="#d97706" />
+          <Stat label="Storage Used" value={s.total_used_bytes != null ? fmtBytes(s.total_used_bytes) : "—"} icon={Database} accent="#0891b2" />
+          <Stat label="Shared Links" value={s.share_count ?? "—"} icon={Share2} accent="#db2777" />
           <Stat label="Users" value={s.total_users ?? "—"} icon={Users} accent="#7c3aed" />
         </div>
 

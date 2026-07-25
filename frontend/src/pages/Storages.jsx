@@ -8,7 +8,15 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { Cloud, Server, HardDrive, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff, X } from "lucide-react";
+import { Cloud, Server, HardDrive, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff, X, RefreshCw } from "lucide-react";
+
+function fmtBytes(n) {
+  if (!n) return "0 B";
+  const u = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0, v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+}
 
 const empty = {
   name: "",
@@ -83,6 +91,7 @@ export default function Storages() {
   const [editId, setEditId] = useState(null);
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [calcId, setCalcId] = useState(null);
 
   const load = () =>
     api.get("/storages").then((r) => setStorages(r.data)).catch((e) => toast.error(apiError(e)));
@@ -90,6 +99,18 @@ export default function Storages() {
   useEffect(() => {
     load();
   }, []);
+
+  const calcUsage = async (s) => {
+    setCalcId(s.id);
+    try {
+      const r = await api.get(`/storages/${s.id}/usage`, { params: { refresh: true } });
+      setStorages((list) => list.map((x) => (x.id === s.id ? { ...x, usage: r.data } : x)));
+    } catch (e) {
+      toast.error(apiError(e, "Usage scan failed"));
+    } finally {
+      setCalcId(null);
+    }
+  };
 
   const setCfg = (k, v) => setForm((f) => ({ ...f, config: { ...f.config, [k]: v } }));
 
@@ -217,6 +238,25 @@ export default function Storages() {
                       <div><span className="text-gray-400">share</span> · {s.config.share || "—"}</div>
                     </>
                   )}
+                </div>
+                <div className="flex items-center justify-between gap-2 mb-4 bg-blue-50/50 border border-blue-100 rounded-xl px-3 py-2" data-testid={`usage-${s.id}`}>
+                  {s.usage ? (
+                    <div className="text-xs text-gray-600">
+                      <span className="font-semibold text-gray-900">{fmtBytes(s.usage.total_size)}</span>
+                      <span className="text-gray-400"> · {s.usage.file_count} files · {s.usage.folder_count} folders</span>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-gray-400">Usage not calculated</div>
+                  )}
+                  <button
+                    onClick={() => calcUsage(s)}
+                    disabled={calcId === s.id}
+                    data-testid={`calc-usage-${s.id}`}
+                    className="shrink-0 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-60"
+                  >
+                    {calcId === s.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
+                    {s.usage ? "Refresh" : "Calculate"}
+                  </button>
                 </div>
                 <div className="flex items-center gap-2">
                   <button

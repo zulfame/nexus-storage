@@ -155,6 +155,23 @@ class S3Backend:
         self.copy(src, dst, is_dir)
         self.delete(src, is_dir)
 
+    def usage(self):
+        def op():
+            total = 0
+            files = 0
+            folders = 0
+            paginator = self.client.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=self.bucket):
+                for o in page.get("Contents", []):
+                    if o["Key"].endswith("/"):
+                        folders += 1
+                    else:
+                        total += o.get("Size", 0)
+                        files += 1
+            return {"total_size": total, "file_count": files, "folder_count": folders}
+
+        return self._attempt(op)
+
 
 class SambaBackend:
     def __init__(self, cfg: dict):
@@ -315,6 +332,27 @@ class SambaBackend:
             self._attempt(lambda: self._copytree(src, dst))
         else:
             self._attempt(lambda: self._copyfile(src, dst))
+
+    def usage(self):
+        def walk(path):
+            total = files = folders = 0
+            rel = _norm(path)
+            for entry in smbclient.scandir(self._unc(path)):
+                child = f"{rel}/{entry.name}" if rel else entry.name
+                if entry.is_dir():
+                    folders += 1
+                    t, f, d = walk(child)
+                    total += t; files += f; folders += d
+                else:
+                    total += entry.stat().st_size
+                    files += 1
+            return total, files, folders
+
+        def op():
+            t, f, d = walk("")
+            return {"total_size": t, "file_count": f, "folder_count": d}
+
+        return self._attempt(op)
 
 
 class SFTPBackend:
@@ -510,6 +548,30 @@ class SFTPBackend:
             self._attempt(lambda: self._copytree(src, dst))
         else:
             self._attempt(lambda: self._copyfile(src, dst))
+
+    def usage(self):
+        def walk(path):
+            total = files = folders = 0
+            rel = _norm(path)
+            for attr in self._sftp.listdir_attr(self._remote(path)):
+                name = attr.filename
+                if name in (".", ".."):
+                    continue
+                child = f"{rel}/{name}" if rel else name
+                if stat_module.S_ISDIR(attr.st_mode):
+                    folders += 1
+                    t, f, d = walk(child)
+                    total += t; files += f; folders += d
+                else:
+                    total += attr.st_size or 0
+                    files += 1
+            return total, files, folders
+
+        def op():
+            t, f, d = walk("")
+            return {"total_size": t, "file_count": f, "folder_count": d}
+
+        return self._attempt(op)
 
 
 def humanize_storage_error(exc: Exception) -> str:

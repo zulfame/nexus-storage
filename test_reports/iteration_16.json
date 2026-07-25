@@ -1,0 +1,29 @@
+{
+  "summary": "Full backend + frontend testing of iteration 16 features: (1) per-storage usage metrics, (2) cross-storage move/copy transfer, (3) shareable public links w/ optional expiry + password. Added /app/backend/tests/test_new_features.py (9 tests, all passing). UI flows exercised end-to-end: usage row + Calculate button, dashboard 'Storage Used' + 'Shared Links' stat cards, cross-storage COPY and MOVE via kebab -> MoveCopyDialog dest-storage-select, same-storage copy into 'upload' folder, share dialog w/ expiry+password (share-create-button -> share-link-output), public /share/<token> page (share-page/share-filename/share-password-input/share-download-button) — wrong password shows error and does NOT redirect to /login (verified in clean-storage browser context), correct password downloads. No-password share downloads directly. Regression: sort, list/grid toggle, preview modal still work. All checks pass; no bugs found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/iter16.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Files.jsx is now ~690 lines; kebab DropdownMenu items (Share/Rename/Move/Copy/Delete on line 579-583) intentionally omit data-testid — testable via role=menuitem name lookup but recommend adding data-testid=`kebab-share-<name>` etc. for stability parity with ContextMenu items.",
+    "server.py _transfer_file loads entire file into memory (stream.read()) then checks MAX_TRANSFER_BYTES — for files close to 500 MB this is a large in-process buffer. Consider streaming upload with size check while reading, or reject upfront based on backend.list-reported size (already partially done via 'if size and size > MAX_TRANSFER_BYTES').",
+    "storage_usage endpoint returns cached usage when refresh=false — good UX, but there is no automatic invalidation after upload/delete/transfer; consider clearing usage doc on write ops so the counter isn't stale.",
+    "SharePage uses plain axios (not the api instance) so 401 does not redirect to /login — confirmed via manual test. Good pattern; keep as-is.",
+    "share_download increments 'downloads' even if the stream is aborted mid-way (StreamingResponse). Minor accuracy issue."
+  ],
+  "updated_files": ["/app/backend/tests/test_new_features.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@example.com / admin123",
+  "seed_data_creation": "Backend pytest creates ephemeral TEST_* SFTP storages and uploads temp files, cleaning them up in finally. UI flow created 2 real shares against SRC_sftp/report.txt (pw p123 + no-pw) — not deleted after run; can be cleaned via DELETE /api/shares/{id} if desired. Also copied report.txt into DST_sftp and moved sheet.csv from SRC_sftp to DST_sftp; a copy of config.json was made into SRC_sftp/upload/. These are harmless test artifacts.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend endpoints: GET /api/storages/{id}/usage?refresh=true (returns {total_size, file_count, folder_count, computed_at}); POST /api/storages/{id}/files/transfer with {dest_storage_id, src, dst, is_dir, move}; POST /api/storages/{id}/files/share with {path, expires_days, password}; GET/DELETE /api/shares; public GET /api/share/{token} + /api/share/{token}/download?password=. Frontend testids: usage-<id>, calc-usage-<id>, dest-storage-select, dest-storage-<name>, move-copy-confirm, move-folder-<name>, share-dialog, share-expiry-<days>, share-password-set, share-create-button, share-link-output, share-copy-button, share-dialog-close, share-page, share-filename, share-password-input, share-download-button, share-download-error, share-error. Kebab menu items in Files.jsx (Share/Rename/Move/Copy/Delete) DON'T have testids — use get_by_role('menuitem', name='Share') etc. Context menu (right-click) DOES have testids (ctx-share-<name>, ctx-copy-<name>, ctx-move-<name>) but programmatic right-click didn't reliably trigger Radix ContextMenu in Playwright — use kebab (data-testid=more-<name>) approach instead. Public share URL uses REACT_APP_BACKEND_URL origin. Dashboard cards labeled 'STORAGE USED' and 'SHARED LINKS' (uppercase via CSS). SRC_sftp usage currently: 49 KB, 14 files, 1 folder (after test artifacts).",
+  "rca of the issue": "N/A — all features working as specified."
+}

@@ -10,6 +10,7 @@ import Users from "@/pages/Users";
 import Files from "@/pages/Files";
 import Logs from "@/pages/Logs";
 import ManageApp from "@/pages/ManageApp";
+import SharePage from "@/pages/SharePage";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -30,6 +31,7 @@ function AppRoutes() {
   const { user } = useAuth();
   return (
     <Routes>
+      <Route path="/share/:token" element={<SharePage />} />
       <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
       <Route
         path="/"

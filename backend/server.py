@@ -7,6 +7,8 @@ load_dotenv(ROOT_DIR / ".env")
 
 import logging
 import re
+import io
+import secrets
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
@@ -131,6 +133,7 @@ def storage_public(doc: dict) -> dict:
         "name": doc["name"],
         "type": doc["type"],
         "config": safe_cfg,
+        "usage": doc.get("usage"),
         "created_at": doc.get("created_at"),
     }
 
@@ -237,6 +240,23 @@ class MoveBody(BaseModel):
     copy: bool = False
 
 
+class TransferBody(BaseModel):
+    dest_storage_id: str
+    src: str
+    dst: str
+    is_dir: bool = False
+    move: bool = False
+
+
+class ShareBody(BaseModel):
+    path: str
+    expires_days: int = 7
+    password: Optional[str] = None
+
+
+MAX_TRANSFER_BYTES = 500 * 1024 * 1024
+
+
 class SettingsBody(BaseModel):
     app_name: str = ""
     tagline: str = ""
@@ -261,7 +281,7 @@ DEFAULT_SETTINGS = {
     "primary_color": "#2563eb",
 }
 
-FILE_ACTIONS = ["upload", "delete", "delete_folder", "create_folder", "move", "copy"]
+FILE_ACTIONS = ["upload", "delete", "delete_folder", "create_folder", "move", "copy", "transfer", "share"]
 
 
 async def get_settings() -> dict:
@@ -593,6 +613,217 @@ async def move_file(storage_id: str, body: MoveBody, user: dict = Depends(get_cu
         raise HTTPException(status_code=400, detail=f"{'Copy' if body.copy else 'Move'} failed: {humanize_storage_error(e)}")
 
 
+# ---------------------------------------------------------------- usage metrics
+@api_router.get("/storages/{storage_id}/usage")
+async def storage_usage(storage_id: str, refresh: bool = False, user: dict = Depends(get_current_user)):
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=False)
+    if not refresh and sdoc.get("usage"):
+        return sdoc["usage"]
+    try:
+        data = await run_in_threadpool(backend.usage)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Usage scan failed: {humanize_storage_error(e)}")
+    data["computed_at"] = datetime.now(timezone.utc).isoformat()
+    await db.storages.update_one({"_id": sdoc["_id"]}, {"$set": {"usage": data}})
+    return data
+
+
+# ---------------------------------------------------------------- cross-storage transfer
+def _split_dst(dst: str):
+    dst = dst.strip().strip("/")
+    if "/" in dst:
+        return dst.rsplit("/", 1)[0], dst.rsplit("/", 1)[1]
+    return "", dst
+
+
+def _transfer_file(sb, tb, src, dst):
+    stream, size = sb.download(src)
+    if size and size > MAX_TRANSFER_BYTES:
+        raise StorageError("File exceeds the 500 MB transfer limit")
+    data = stream.read()
+    if len(data) > MAX_TRANSFER_BYTES:
+        raise StorageError("File exceeds the 500 MB transfer limit")
+    parent, name = _split_dst(dst)
+    tb.upload(parent, io.BytesIO(data), name)
+
+
+def _transfer_dir(sb, tb, src, dst):
+    parent, name = _split_dst(dst)
+    try:
+        tb.mkdir(parent, name)
+    except Exception:
+        pass
+    for item in sb.list(src):
+        cs = item["path"]
+        cd = f"{dst}/{item['name']}"
+        if item["is_dir"]:
+            _transfer_dir(sb, tb, cs, cd)
+        else:
+            _transfer_file(sb, tb, cs, cd)
+
+
+@api_router.post("/storages/{storage_id}/files/transfer")
+async def transfer_file(storage_id: str, body: TransferBody, user: dict = Depends(get_current_user)):
+    src = body.src.strip().strip("/")
+    dst = body.dst.strip().strip("/")
+    if not src or not dst:
+        raise HTTPException(status_code=400, detail="Source and destination are required")
+    if body.dest_storage_id == storage_id:
+        raise HTTPException(status_code=400, detail="Use move/copy for the same storage")
+
+    src_backend, src_doc = await _resolve_backend(storage_id, user, need_write=body.move)
+    dst_backend, dst_doc = await _resolve_backend(body.dest_storage_id, user, need_write=True)
+
+    def do_transfer():
+        if body.is_dir:
+            _transfer_dir(src_backend, dst_backend, src, dst)
+        else:
+            _transfer_file(src_backend, dst_backend, src, dst)
+        if body.move:
+            src_backend.delete(src, body.is_dir)
+
+    try:
+        await run_in_threadpool(do_transfer)
+        action = "transfer"
+        detail = f"{'Moved' if body.move else 'Copied'} from {src_doc.get('name')}:{src} to {dst_doc.get('name')}:{dst}"
+        await log_activity(user, action, dst_doc, dst, detail)
+        return {"status": "ok", "path": dst, "storage_id": body.dest_storage_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Transfer failed: {humanize_storage_error(e)}")
+
+
+# ---------------------------------------------------------------- shareable links
+def _share_public(doc: dict) -> dict:
+    return {
+        "id": str(doc["_id"]),
+        "token": doc["token"],
+        "storage_id": doc["storage_id"],
+        "storage_name": doc.get("storage_name"),
+        "path": doc["path"],
+        "name": doc["name"],
+        "size": doc.get("size"),
+        "requires_password": bool(doc.get("password_hash")),
+        "expires_at": doc.get("expires_at"),
+        "downloads": doc.get("downloads", 0),
+        "created_by": doc.get("created_by"),
+        "created_at": doc.get("created_at"),
+    }
+
+
+async def _file_size_in(backend, path: str):
+    parent = path.rsplit("/", 1)[0] if "/" in path else ""
+    name = path.rsplit("/", 1)[-1]
+    try:
+        items = await run_in_threadpool(backend.list, parent)
+        for it in items:
+            if it["name"] == name and not it["is_dir"]:
+                return it.get("size")
+    except Exception:
+        pass
+    return None
+
+
+@api_router.post("/storages/{storage_id}/files/share")
+async def create_share(storage_id: str, body: ShareBody, user: dict = Depends(get_current_user)):
+    path = body.path.strip().strip("/")
+    if not path:
+        raise HTTPException(status_code=400, detail="Path is required")
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=False)
+    size = await _file_size_in(backend, path)
+    token = secrets.token_urlsafe(16)
+    now = datetime.now(timezone.utc)
+    expires_at = (now + timedelta(days=body.expires_days)).isoformat() if body.expires_days and body.expires_days > 0 else None
+    doc = {
+        "token": token,
+        "storage_id": storage_id,
+        "storage_name": sdoc.get("name"),
+        "path": path,
+        "name": path.rsplit("/", 1)[-1],
+        "size": size,
+        "password_hash": hash_password(body.password) if body.password else None,
+        "expires_at": expires_at,
+        "downloads": 0,
+        "created_by": user.get("email"),
+        "created_at": now.isoformat(),
+    }
+    res = await db.shares.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    await log_activity(user, "share", sdoc, path, f"Created share link (expires {expires_at or 'never'})")
+    return _share_public(doc)
+
+
+@api_router.get("/shares")
+async def list_shares(user: dict = Depends(get_current_user)):
+    query = {} if user.get("role") == "admin" else {"created_by": user.get("email")}
+    docs = await db.shares.find(query).sort("created_at", -1).to_list(500)
+    return [_share_public(d) for d in docs]
+
+
+@api_router.delete("/shares/{share_id}")
+async def delete_share(share_id: str, user: dict = Depends(get_current_user)):
+    try:
+        doc = await db.shares.find_one({"_id": ObjectId(share_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if not doc:
+        raise HTTPException(status_code=404, detail="Share not found")
+    if user.get("role") != "admin" and doc.get("created_by") != user.get("email"):
+        raise HTTPException(status_code=403, detail="Not allowed")
+    await db.shares.delete_one({"_id": doc["_id"]})
+    return {"status": "deleted"}
+
+
+def _share_expired(doc: dict) -> bool:
+    exp = doc.get("expires_at")
+    if not exp:
+        return False
+    try:
+        return datetime.now(timezone.utc) > datetime.fromisoformat(exp)
+    except Exception:
+        return False
+
+
+@api_router.get("/share/{token}")
+async def share_info(token: str):
+    doc = await db.shares.find_one({"token": token})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Link not found")
+    if _share_expired(doc):
+        raise HTTPException(status_code=410, detail="This link has expired")
+    return {
+        "name": doc["name"],
+        "size": doc.get("size"),
+        "requires_password": bool(doc.get("password_hash")),
+        "expires_at": doc.get("expires_at"),
+        "downloads": doc.get("downloads", 0),
+    }
+
+
+@api_router.get("/share/{token}/download")
+async def share_download(token: str, password: Optional[str] = None):
+    doc = await db.shares.find_one({"token": token})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Link not found")
+    if _share_expired(doc):
+        raise HTTPException(status_code=410, detail="This link has expired")
+    if doc.get("password_hash"):
+        if not password or not verify_password(password, doc["password_hash"]):
+            raise HTTPException(status_code=401, detail="Incorrect password")
+    sdoc = await db.storages.find_one({"_id": ObjectId(doc["storage_id"])})
+    if not sdoc:
+        raise HTTPException(status_code=404, detail="Storage no longer exists")
+    try:
+        backend = build_backend(sdoc["type"], decrypt_config(sdoc))
+        stream, size = await run_in_threadpool(backend.download, doc["path"])
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Download failed: {humanize_storage_error(e)}")
+    await db.shares.update_one({"_id": doc["_id"]}, {"$inc": {"downloads": 1}})
+    headers = {"Content-Disposition": f'attachment; filename="{doc["name"]}"'}
+    return StreamingResponse(stream, media_type="application/octet-stream", headers=headers)
+
+
 @api_router.get("/logs")
 async def list_logs(
     admin: dict = Depends(require_admin),
@@ -701,6 +932,10 @@ async def dashboard_stats(admin: dict = Depends(require_admin)):
     sftp_count = await db.storages.count_documents({"type": "sftp"})
     total_users = await db.users.count_documents({})
     admin_count = await db.users.count_documents({"role": "admin"})
+    share_count = await db.shares.count_documents({})
+    total_used = 0
+    async for s in db.storages.find({"usage.total_size": {"$exists": True}}, {"usage": 1}):
+        total_used += (s.get("usage") or {}).get("total_size") or 0
     return {
         "total_storages": total_storages,
         "s3_count": s3_count,
@@ -708,6 +943,8 @@ async def dashboard_stats(admin: dict = Depends(require_admin)):
         "sftp_count": sftp_count,
         "total_users": total_users,
         "admin_count": admin_count,
+        "share_count": share_count,
+        "total_used_bytes": total_used,
     }
 
 
@@ -793,6 +1030,8 @@ async def on_startup():
     await db.users.create_index("email", unique=True)
     await db.activity_logs.create_index([("timestamp", -1)])
     await db.activity_logs.create_index("action")
+    await db.shares.create_index("token", unique=True)
+    await db.shares.create_index("created_by")
     await seed_admin()
 
 
