@@ -10,6 +10,7 @@ import Users from "@/pages/Users";
 import Files from "@/pages/Files";
 import Logs from "@/pages/Logs";
 import ManageApp from "@/pages/ManageApp";
+import ManageApis from "@/pages/ManageApis";
 import SharePage from "@/pages/SharePage";
 import { SettingsProvider } from "@/context/SettingsContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -43,9 +44,7 @@ function AppRoutes() {
       >
         <Route
           index
-          element={
-            user?.role === "admin" ? <Dashboard /> : <Navigate to="/files" replace />
-          }
+          element={<Dashboard />}
         />
         <Route
           path="storages"
@@ -64,19 +63,20 @@ function AppRoutes() {
           }
         />
         <Route path="files" element={<Files />} />
-        <Route
-          path="logs"
-          element={
-            <ProtectedRoute adminOnly>
-              <Logs />
-            </ProtectedRoute>
-          }
-        />
+        <Route path="logs" element={<Logs />} />
         <Route
           path="settings"
           element={
             <ProtectedRoute adminOnly>
               <ManageApp />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="manage-apis"
+          element={
+            <ProtectedRoute adminOnly>
+              <ManageApis />
             </ProtectedRoute>
           }
         />

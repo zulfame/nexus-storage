@@ -40,9 +40,10 @@ export function DownloadManager({ downloads = [], onDismiss }) {
                   <span className="text-xs font-medium text-gray-800 truncate flex-1" title={d.name}>{d.name}</span>
                   <button
                     onClick={() => onDismiss?.(d.id)}
-                    aria-label="Dismiss"
+                    aria-label={d.status === "downloading" ? "Cancel download" : "Dismiss"}
+                    title={d.status === "downloading" ? "Cancel download" : "Dismiss"}
                     data-testid={`download-dismiss-${d.name}`}
-                    className="shrink-0 h-6 w-6 flex items-center justify-center rounded-md text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+                    className={`shrink-0 h-6 w-6 flex items-center justify-center rounded-md transition-colors ${d.status === "downloading" ? "text-gray-400 hover:text-red-600 hover:bg-red-50" : "text-gray-400 hover:text-gray-700 hover:bg-gray-100"}`}
                   >
                     <X size={13} />
                   </button>

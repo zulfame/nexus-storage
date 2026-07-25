@@ -378,6 +378,8 @@ class SFTPBackend:
             self.port = 2222
         self.username = cfg.get("username")
         self.password = cfg.get("password")
+        self.private_key = (cfg.get("private_key") or "").strip()
+        self.passphrase = cfg.get("passphrase") or None
         base_raw = (cfg.get("base_path") or "").strip()
         self._base_absolute = base_raw.startswith("/")
         self.base = base_raw.strip("/")
@@ -385,21 +387,44 @@ class SFTPBackend:
         self._client = None
         self._sftp = None
 
+    def _load_pkey(self):
+        key_classes = [
+            paramiko.Ed25519Key,
+            paramiko.RSAKey,
+            paramiko.ECDSAKey,
+            getattr(paramiko, "DSSKey", None),
+        ]
+        last = None
+        for cls in key_classes:
+            if cls is None:
+                continue
+            try:
+                return cls.from_private_key(io.StringIO(self.private_key), password=self.passphrase)
+            except Exception as e:
+                last = e
+        raise StorageError(f"Invalid SFTP private key: {last}")
+
     def _connect(self):
         self._close()
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        client.connect(
+        connect_kwargs = dict(
             hostname=self.host,
             port=self.port,
             username=self.username,
-            password=self.password,
             timeout=15,
             banner_timeout=15,
             auth_timeout=15,
             look_for_keys=False,
             allow_agent=False,
         )
+        if self.private_key:
+            connect_kwargs["pkey"] = self._load_pkey()
+            if self.password:
+                connect_kwargs["password"] = self.password
+        else:
+            connect_kwargs["password"] = self.password
+        client.connect(**connect_kwargs)
         self._client = client
         self._sftp = client.open_sftp()
         self._sftp.get_channel().settimeout(60)

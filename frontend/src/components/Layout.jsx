@@ -11,6 +11,7 @@ import {
   Database,
   ScrollText,
   SlidersHorizontal,
+  KeyRound,
   Menu,
   X,
 } from "lucide-react";
@@ -111,13 +112,14 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 py-4 flex flex-col gap-1 overflow-y-auto">
-          {isAdmin && <Item to="/" end icon={LayoutDashboard} label="Dashboard" testid="nav-dashboard" onNavigate={close} />}
+          <Item to="/" end icon={LayoutDashboard} label="Dashboard" testid="nav-dashboard" onNavigate={close} />
           <Item to="/files" icon={FolderOpen} label="File Browser" testid="nav-files" onNavigate={close} />
+          {isAdmin && <Item to="/storages" icon={HardDrive} label="List Storage" testid="nav-storages" onNavigate={close} />}
+          <Item to="/logs" icon={ScrollText} label="Logs Activity" testid="nav-logs" onNavigate={close} />
           {isAdmin && (
             <>
-              <Item to="/storages" icon={HardDrive} label="List Storage" testid="nav-storages" onNavigate={close} />
-              <Item to="/logs" icon={ScrollText} label="Logs Activity" testid="nav-logs" onNavigate={close} />
               <Item to="/settings" icon={SlidersHorizontal} label="Manage App" testid="nav-manage-app" onNavigate={close} />
+              <Item to="/manage-apis" icon={KeyRound} label="Manage APIs" testid="nav-manage-apis" onNavigate={close} />
               <Item to="/users" icon={Users} label="Manage User" testid="nav-users" onNavigate={close} />
             </>
           )}

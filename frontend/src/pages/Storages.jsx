@@ -35,6 +35,8 @@ const empty = {
     password: "",
     domain: "",
     base_path: "",
+    private_key: "",
+    passphrase: "",
     capacity_gb: "",
   },
 };
@@ -147,7 +149,7 @@ export default function Storages() {
     if (form.type === "s3") {
       config = { region: c.region, endpoint: c.endpoint, bucket: c.bucket, access_key: c.access_key, secret_key: c.secret_key };
     } else if (form.type === "sftp") {
-      config = { host: c.host, port: c.port, username: c.username, password: c.password, base_path: c.base_path };
+      config = { host: c.host, port: c.port, username: c.username, password: c.password, base_path: c.base_path, private_key: c.private_key, passphrase: c.passphrase };
     } else {
       config = { host: c.host, share: c.share, port: c.port, username: c.username, password: c.password, domain: c.domain };
     }
@@ -365,6 +367,20 @@ export default function Storages() {
                       <Field label="Username" value={form.config.username} onChange={(v) => setCfg("username", v)} placeholder="admin" testid="sftp-username-input" />
                       <Field label="Password" value={form.config.password} onChange={(v) => setCfg("password", v)} placeholder="••••••" type="password" testid="sftp-password-input" />
                     </div>
+                    <div>
+                      <label className="text-sm font-medium text-gray-700 block mb-1.5">Private key <span className="text-gray-400 font-normal">(optional — for SSH key auth)</span></label>
+                      <textarea
+                        value={form.config.private_key}
+                        onChange={(e) => setCfg("private_key", e.target.value)}
+                        data-testid="sftp-private-key-input"
+                        rows={4}
+                        spellCheck={false}
+                        placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;… paste PEM private key …&#10;-----END OPENSSH PRIVATE KEY-----"
+                        className="w-full bg-white border border-gray-200 rounded-xl px-3.5 py-2.5 text-xs font-mono outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors resize-y"
+                      />
+                      <p className="text-xs text-gray-400 mt-1">If a private key is provided it is used instead of the password. RSA, Ed25519 & ECDSA supported.</p>
+                    </div>
+                    <Field label="Key passphrase (optional)" value={form.config.passphrase} onChange={(v) => setCfg("passphrase", v)} placeholder="Only if your key is encrypted" type="password" testid="sftp-passphrase-input" />
                     <Field label="Base path (optional)" value={form.config.base_path} onChange={(v) => setCfg("base_path", v)} placeholder="Leave empty for home folder" testid="sftp-basepath-input" />
                   </div>
                 ) : (

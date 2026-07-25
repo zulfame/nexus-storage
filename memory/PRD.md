@@ -197,6 +197,48 @@ config, README env-var table).
   picker shows "Open File Browser" + meter "3.3 MB / 300 GB", PRODUCTION (no capacity) shows
   "Usage not calculated / Calculate".
 
+## Implemented (2026-06, fork: P1 backlog)
+- **Storage config validation + 404**: `validate_storage()` enforces required fields per type on
+  create/update (S3: bucket/access_key/secret_key; SFTP: host/username + password-or-private_key;
+  Samba: host/share/username) → clear 400 messages; empty name rejected. Admin now gets 404 for
+  unknown/malformed storage ids (usage/config/files all resolve or 404).
+- **SFTP private-key auth**: SFTPBackend accepts `private_key` (PEM) + optional `passphrase`
+  (tries Ed25519/RSA/ECDSA/DSS); used instead of password when provided. Both encrypted at rest
+  (MultiFernet) and revealed in the edit dialog via /config. Storage form gains a private-key
+  textarea + passphrase field for SFTP.
+- **Drag-to-move** (File Browser, same storage): file/folder rows & cards are draggable; drop onto a
+  folder row/card or a breadcrumb crumb (incl. root) to move. Drop targets highlight; the external
+  upload overlay is suppressed during an internal drag. Folder-into-itself and same-parent are guarded.
+- **Cancel download**: each download uses an AbortController; the X in the Download panel cancels an
+  in-flight download (turns red on hover) and removes it immediately.
+- Verified: backend validation + 404 via curl (400 messages + 404s correct). Frontend DnD &
+  cancel-download queued for testing_agent e2e.
+
+## Implemented (2026-06, fork: P2 Client APIs + Manage App refinements)
+- **P2 Client APIs**: admin-managed API keys (`/api/api-keys` CRUD) + public **`/api/v1`** endpoints
+  (ping, storages, files list, download, upload, folder, delete) authenticated by API key
+  (`Authorization: Bearer` or `X-API-Key`). Keys: SHA-256 hash stored (raw shown once), per-storage
+  read/write grants, revoke/activate, request_count + last_used_at. Every `/api/v1` call is logged to
+  **Logs Activity** as `[API] <key name>` (new `api_*` actions, "API Calls" tab + stat + counts).
+- **Manage APIs page** (`/manage-apis`, admin): pretty card table of keys (masked key, access badges,
+  status, requests, last used, revoke/delete) + **API Documentation** card (base URL, auth header,
+  **accordion** of endpoints each with description, parameter table, sample curl request & JSON response).
+  NOTE: route is `/manage-apis` NOT `/api-keys` (the `/api` prefix routes to backend via ingress).
+- **Dashboard & Logs for role=user**: both are now visible/accessible to non-admins, with data scoped
+  to their accessible storages (dashboard hides Users/Team; logs limited to their storages + own actions).
+  Backend `list_logs` & `dashboard_stats` no longer require admin (scoped by role).
+- **Primary color now applies app-wide**: SettingsContext converts `primary_color` hex → HSL and sets
+  the `--primary`/`--ring` CSS variables, so all `bg/text/border/ring-primary` usages reflect it.
+- **Open Graph / social meta**: SettingsContext injects `og:title/description/type/site_name/image`,
+  `twitter:*`, `theme-color`, `<title>` and favicon from app settings (app_name, meta_description,
+  favicon_url). LIMITATION: injected client-side, so JS-less link crawlers may not read them (true SSR
+  would be needed for guaranteed unfurl).
+- **Sidebar order**: Dashboard → File Browser → List Storage → Logs Activity → Manage App →
+  Manage APIs → Manage User (Logs moved below List Storage; still shown to users).
+- Verified: API key full lifecycle + scopes + logging via curl; user-scoped dashboard/logs via curl;
+  Manage APIs UI, accordion docs, primary-color override (green test then restored), and OG meta
+  presence via screenshots. (testing_agent timed out; validated manually instead.)
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).

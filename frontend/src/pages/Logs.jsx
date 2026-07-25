@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Loader2,
   Search,
+  Terminal,
 } from "lucide-react";
 
 const PAGE_SIZE = 10;
@@ -91,6 +92,7 @@ export default function Logs() {
   const tabs = [
     { k: "all", label: "All Activity" },
     { k: "file", label: "File Operations" },
+    { k: "api", label: "API Calls" },
     { k: "conn", label: "Connections" },
   ];
 
@@ -106,9 +108,10 @@ export default function Logs() {
       </PageHeader>
 
       <div className="p-4 sm:p-8">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
           <StatCard label="Total Events" value={counts.all ?? 0} icon={Activity} color="#2563eb" />
           <StatCard label="File Operations" value={counts.file ?? 0} icon={FileStack} color="#059669" />
+          <StatCard label="API Calls" value={counts.api ?? 0} icon={Terminal} color="#0d9488" />
           <StatCard label="Connection Events" value={counts.conn ?? 0} icon={Wifi} color="#7c3aed" />
           <StatCard label="Auto-Reconnects" value={counts.reconnect ?? 0} icon={PlugZap} color="#d97706" />
         </div>

@@ -9,13 +9,14 @@ import logging
 import re
 import io
 import secrets
+import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 
 import bcrypt
 import jwt
 from bson import ObjectId
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query, Header, Security
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
 from starlette.concurrency import run_in_threadpool
@@ -145,6 +146,10 @@ def decrypt_config(doc: dict) -> dict:
         cfg["secret_key"] = decrypt(cfg["secret_key"])
     if doc["type"] in ("samba", "sftp") and cfg.get("password"):
         cfg["password"] = decrypt(cfg["password"])
+    if doc["type"] == "sftp" and cfg.get("private_key"):
+        cfg["private_key"] = decrypt(cfg["private_key"])
+    if doc["type"] == "sftp" and cfg.get("passphrase"):
+        cfg["passphrase"] = decrypt(cfg["passphrase"])
     return cfg
 
 
@@ -290,6 +295,7 @@ DEFAULT_SETTINGS = {
 }
 
 FILE_ACTIONS = ["upload", "delete", "delete_folder", "create_folder", "move", "copy", "transfer", "share"]
+API_ACTIONS = ["api_list", "api_download", "api_upload", "api_create_folder", "api_delete"]
 
 
 async def get_settings() -> dict:
@@ -413,15 +419,40 @@ async def list_storages(include_inaccessible: bool = False, user: dict = Depends
     return result
 
 
+def validate_storage(stype: str, cfg: dict, has_password_secret: bool = False):
+    def present(f):
+        v = cfg.get(f)
+        return v is not None and str(v).strip() != ""
+    if stype == "s3":
+        missing = [f for f in ("bucket", "access_key", "secret_key") if not present(f)]
+    elif stype == "sftp":
+        missing = [f for f in ("host", "username") if not present(f)]
+        if not present("password") and not present("private_key") and not has_password_secret:
+            missing.append("password or private_key")
+    elif stype == "samba":
+        missing = [f for f in ("host", "share", "username") if not present(f)]
+    else:
+        raise HTTPException(status_code=400, detail="type must be s3, samba or sftp")
+    if missing:
+        raise HTTPException(status_code=400, detail=f"Missing required field(s) for {stype.upper()}: {', '.join(missing)}")
+
+
 @api_router.post("/storages")
 async def create_storage(body: StorageBody, admin: dict = Depends(require_admin)):
     if body.type not in ("s3", "samba", "sftp"):
         raise HTTPException(status_code=400, detail="type must be s3, samba or sftp")
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="Display name is required")
     cfg = dict(body.config)
+    validate_storage(body.type, cfg)
     if body.type == "s3" and cfg.get("secret_key"):
         cfg["secret_key"] = encrypt(cfg["secret_key"])
     if body.type in ("samba", "sftp") and cfg.get("password"):
         cfg["password"] = encrypt(cfg["password"])
+    if body.type == "sftp" and cfg.get("private_key"):
+        cfg["private_key"] = encrypt(cfg["private_key"])
+    if body.type == "sftp" and cfg.get("passphrase"):
+        cfg["passphrase"] = encrypt(cfg["passphrase"])
     doc = {
         "name": body.name,
         "type": body.type,
@@ -437,6 +468,10 @@ async def create_storage(body: StorageBody, admin: dict = Depends(require_admin)
 
 @api_router.put("/storages/{storage_id}")
 async def update_storage(storage_id: str, body: StorageBody, admin: dict = Depends(require_admin)):
+    if body.type not in ("s3", "samba", "sftp"):
+        raise HTTPException(status_code=400, detail="type must be s3, samba or sftp")
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="Display name is required")
     doc = await get_storage_or_404(storage_id)
     existing = dict(doc.get("config", {}))
     cfg = dict(body.config)
@@ -452,6 +487,17 @@ async def update_storage(storage_id: str, body: StorageBody, admin: dict = Depen
             cfg["password"] = encrypt(cfg["password"])
         else:
             cfg["password"] = existing.get("password", "") if same_type else ""
+    if body.type == "sftp":
+        if cfg.get("private_key"):
+            cfg["private_key"] = encrypt(cfg["private_key"])
+        else:
+            cfg["private_key"] = existing.get("private_key", "") if same_type else ""
+        if cfg.get("passphrase"):
+            cfg["passphrase"] = encrypt(cfg["passphrase"])
+        else:
+            cfg["passphrase"] = existing.get("passphrase", "") if same_type else ""
+    has_secret = bool(cfg.get("password") or cfg.get("private_key"))
+    validate_storage(body.type, cfg, has_password_secret=has_secret)
     await db.storages.update_one(
         {"_id": ObjectId(storage_id)},
         {"$set": {"name": body.name, "type": body.type, "config": cfg}},
@@ -956,19 +1002,40 @@ async def share_download(token: str, password: Optional[str] = None):
     return StreamingResponse(stream, media_type="application/octet-stream", headers=headers)
 
 
+async def _accessible_storage_names(user: dict):
+    names = []
+    for a in user.get("access", []) or []:
+        sid = a.get("storage_id")
+        if not sid:
+            continue
+        try:
+            d = await db.storages.find_one({"_id": ObjectId(sid)}, {"name": 1})
+        except Exception:
+            d = None
+        if d:
+            names.append(d.get("name"))
+    return names
+
+
 @api_router.get("/logs")
 async def list_logs(
-    admin: dict = Depends(require_admin),
+    user: dict = Depends(get_current_user),
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     category: str = "all",
     search: str = "",
 ):
-    conds = []
+    base = []
+    if user.get("role") != "admin":
+        names = await _accessible_storage_names(user)
+        base.append({"$or": [{"storage_name": {"$in": names}}, {"user_email": user.get("email")}]})
+    conds = list(base)
     if category == "file":
         conds.append({"action": {"$in": FILE_ACTIONS}})
+    elif category == "api":
+        conds.append({"action": {"$in": API_ACTIONS}})
     elif category == "conn":
-        conds.append({"action": {"$nin": FILE_ACTIONS}})
+        conds.append({"action": {"$nin": FILE_ACTIONS + API_ACTIONS}})
     if search.strip():
         rx = {"$regex": re.escape(search.strip()), "$options": "i"}
         conds.append(
@@ -996,10 +1063,16 @@ async def list_logs(
         }
         for l in logs
     ]
-    all_count = await db.activity_logs.count_documents({})
-    file_count = await db.activity_logs.count_documents({"action": {"$in": FILE_ACTIONS}})
-    reconnect_count = await db.activity_logs.count_documents({"action": "reconnect"})
-    counts = {"all": all_count, "file": file_count, "conn": all_count - file_count, "reconnect": reconnect_count}
+
+    def merge(extra):
+        cs = base + ([extra] if extra else [])
+        return {"$and": cs} if cs else {}
+
+    all_count = await db.activity_logs.count_documents(merge(None))
+    file_count = await db.activity_logs.count_documents(merge({"action": {"$in": FILE_ACTIONS}}))
+    api_count = await db.activity_logs.count_documents(merge({"action": {"$in": API_ACTIONS}}))
+    reconnect_count = await db.activity_logs.count_documents(merge({"action": "reconnect"}))
+    counts = {"all": all_count, "file": file_count, "api": api_count, "conn": all_count - file_count - api_count, "reconnect": reconnect_count}
     return {"items": items, "total": total, "counts": counts}
 
 
@@ -1057,18 +1130,38 @@ async def update_app_settings(body: SettingsBody, admin: dict = Depends(require_
 
 # ---------------------------------------------------------------- dashboard
 @api_router.get("/dashboard/stats")
-async def dashboard_stats(admin: dict = Depends(require_admin)):
-    total_storages = await db.storages.count_documents({})
-    s3_count = await db.storages.count_documents({"type": "s3"})
-    samba_count = await db.storages.count_documents({"type": "samba"})
-    sftp_count = await db.storages.count_documents({"type": "sftp"})
-    total_users = await db.users.count_documents({})
-    admin_count = await db.users.count_documents({"role": "admin"})
-    share_count = await db.shares.count_documents({})
+async def dashboard_stats(user: dict = Depends(get_current_user)):
+    is_admin = user.get("role") == "admin"
+    if is_admin:
+        sfilter = {}
+        storage_ids = None
+    else:
+        ids = [a.get("storage_id") for a in user.get("access", []) or [] if a.get("storage_id")]
+        oids = []
+        for sid in ids:
+            try:
+                oids.append(ObjectId(sid))
+            except Exception:
+                pass
+        sfilter = {"_id": {"$in": oids}}
+        storage_ids = oids
+    total_storages = await db.storages.count_documents(sfilter)
+    s3_count = await db.storages.count_documents({**sfilter, "type": "s3"})
+    samba_count = await db.storages.count_documents({**sfilter, "type": "samba"})
+    sftp_count = await db.storages.count_documents({**sfilter, "type": "sftp"})
     total_used = 0
-    async for s in db.storages.find({"usage.total_size": {"$exists": True}}, {"usage": 1}):
+    async for s in db.storages.find({**sfilter, "usage.total_size": {"$exists": True}}, {"usage": 1}):
         total_used += (s.get("usage") or {}).get("total_size") or 0
+    if is_admin:
+        total_users = await db.users.count_documents({})
+        admin_count = await db.users.count_documents({"role": "admin"})
+        share_count = await db.shares.count_documents({})
+    else:
+        total_users = None
+        admin_count = None
+        share_count = await db.shares.count_documents({"created_by": str(user["_id"])})
     return {
+        "is_admin": is_admin,
         "total_storages": total_storages,
         "s3_count": s3_count,
         "samba_count": samba_count,
@@ -1085,8 +1178,252 @@ async def root():
     return {"message": "Nexus Storage Manager API"}
 
 
+# ---------------------------------------------------------------- Client API keys (P2)
+API_KEY_PREFIX = "sk_live_"
+
+
+def hash_api_key(raw: str) -> str:
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def apikey_public(doc: dict) -> dict:
+    return {
+        "id": str(doc["_id"]),
+        "name": doc.get("name", ""),
+        "key_prefix": doc.get("key_prefix", ""),
+        "key_masked": f"{doc.get('key_prefix', '')}…{doc.get('key_last4', '')}",
+        "storages": doc.get("storages", []),
+        "is_active": doc.get("is_active", True),
+        "created_at": doc.get("created_at"),
+        "last_used_at": doc.get("last_used_at"),
+        "revoked_at": doc.get("revoked_at"),
+        "request_count": doc.get("request_count", 0),
+    }
+
+
+class ApiKeyBody(BaseModel):
+    name: str
+    storages: List[AccessEntry] = Field(default_factory=list)
+
+
+class ApiKeyUpdate(BaseModel):
+    name: Optional[str] = None
+    storages: Optional[List[AccessEntry]] = None
+    is_active: Optional[bool] = None
+
+
+@api_router.get("/api-keys")
+async def list_api_keys(admin: dict = Depends(require_admin)):
+    docs = await db.api_keys.find().sort("created_at", -1).to_list(1000)
+    return [apikey_public(d) for d in docs]
+
+
+@api_router.post("/api-keys")
+async def create_api_key(body: ApiKeyBody, admin: dict = Depends(require_admin)):
+    if not (body.name or "").strip():
+        raise HTTPException(status_code=400, detail="Name is required")
+    raw = API_KEY_PREFIX + secrets.token_urlsafe(32)
+    doc = {
+        "name": body.name.strip(),
+        "key_hash": hash_api_key(raw),
+        "key_prefix": raw[:11],
+        "key_last4": raw[-4:],
+        "storages": [a.model_dump() for a in body.storages],
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "last_used_at": None,
+        "revoked_at": None,
+        "request_count": 0,
+        "created_by": str(admin["_id"]),
+    }
+    res = await db.api_keys.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    out = apikey_public(doc)
+    out["key"] = raw  # returned only once
+    return out
+
+
+@api_router.put("/api-keys/{key_id}")
+async def update_api_key(key_id: str, body: ApiKeyUpdate, admin: dict = Depends(require_admin)):
+    try:
+        doc = await db.api_keys.find_one({"_id": ObjectId(key_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if not doc:
+        raise HTTPException(status_code=404, detail="API key not found")
+    updates = {}
+    if body.name is not None:
+        if not body.name.strip():
+            raise HTTPException(status_code=400, detail="Name cannot be empty")
+        updates["name"] = body.name.strip()
+    if body.storages is not None:
+        updates["storages"] = [a.model_dump() for a in body.storages]
+    if body.is_active is not None:
+        updates["is_active"] = body.is_active
+        updates["revoked_at"] = None if body.is_active else datetime.now(timezone.utc).isoformat()
+    if updates:
+        await db.api_keys.update_one({"_id": doc["_id"]}, {"$set": updates})
+    updated = await db.api_keys.find_one({"_id": doc["_id"]})
+    return apikey_public(updated)
+
+
+@api_router.delete("/api-keys/{key_id}")
+async def delete_api_key(key_id: str, admin: dict = Depends(require_admin)):
+    try:
+        res = await db.api_keys.delete_one({"_id": ObjectId(key_id)})
+    except Exception:
+        raise HTTPException(status_code=404, detail="API key not found")
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="API key not found")
+    return {"status": "deleted"}
+
+
+# ---- /api/v1 client-facing endpoints (API-key auth) ----
+_v1_bearer = HTTPBearer(auto_error=False)
+
+
+async def get_api_client(
+    creds=Security(_v1_bearer),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+):
+    raw = None
+    if creds and (creds.scheme or "").lower() == "bearer":
+        raw = creds.credentials
+    elif x_api_key:
+        raw = x_api_key
+    if not raw:
+        raise HTTPException(status_code=401, detail="Missing API key", headers={"WWW-Authenticate": "Bearer"})
+    doc = await db.api_keys.find_one({"key_hash": hash_api_key(raw), "is_active": True})
+    if not doc:
+        raise HTTPException(status_code=401, detail="Invalid or revoked API key", headers={"WWW-Authenticate": "Bearer"})
+    await db.api_keys.update_one(
+        {"_id": doc["_id"]},
+        {"$set": {"last_used_at": datetime.now(timezone.utc).isoformat()}, "$inc": {"request_count": 1}},
+    )
+    return doc
+
+
+def apikey_permission_for(key: dict, storage_id: str) -> Optional[str]:
+    for a in key.get("storages", []):
+        if a.get("storage_id") == storage_id:
+            return a.get("permission", "read")
+    return None
+
+
+async def log_api_activity(key: dict, action: str, sdoc: dict, path: str, detail: str = ""):
+    await log_activity({"email": f"[API] {key.get('name', 'key')}"}, action, sdoc, path, detail)
+
+
+async def _resolve_backend_apikey(storage_id: str, key: dict, need_write: bool):
+    perm = apikey_permission_for(key, storage_id)
+    if perm is None:
+        raise HTTPException(status_code=403, detail="This API key has no access to this storage")
+    if need_write and perm != "write":
+        raise HTTPException(status_code=403, detail="This API key is read-only for this storage")
+    doc = await get_storage_or_404(storage_id)
+    try:
+        return build_backend(doc["type"], decrypt_config(doc)), doc
+    except StorageError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+v1_router = APIRouter(prefix="/api/v1")
+
+
+@v1_router.get("/ping")
+async def v1_ping(key: dict = Depends(get_api_client)):
+    return {"ok": True, "name": key.get("name"), "storages": key.get("storages", [])}
+
+
+@v1_router.get("/storages")
+async def v1_storages(key: dict = Depends(get_api_client)):
+    result = []
+    for a in key.get("storages", []):
+        try:
+            doc = await db.storages.find_one({"_id": ObjectId(a["storage_id"])})
+        except Exception:
+            doc = None
+        if doc:
+            pub = storage_public(doc)
+            pub["permission"] = a.get("permission", "read")
+            result.append(pub)
+    return result
+
+
+@v1_router.get("/storages/{storage_id}/files")
+async def v1_list(storage_id: str, path: str = "", key: dict = Depends(get_api_client)):
+    backend, sdoc = await _resolve_backend_apikey(storage_id, key, need_write=False)
+    try:
+        items = await run_in_threadpool(backend.list, path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=humanize_storage_error(e))
+    await log_api_activity(key, "api_list", sdoc, path)
+    return {"path": path, "items": items}
+
+
+@v1_router.get("/storages/{storage_id}/download")
+async def v1_download(storage_id: str, path: str, key: dict = Depends(get_api_client)):
+    backend, sdoc = await _resolve_backend_apikey(storage_id, key, need_write=False)
+    try:
+        stream, size = await run_in_threadpool(backend.download, path)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=humanize_storage_error(e))
+    await log_api_activity(key, "api_download", sdoc, path)
+    filename = path.rstrip("/").split("/")[-1]
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    if size and size > 0:
+        headers["Content-Length"] = str(size)
+    return StreamingResponse(stream, media_type="application/octet-stream", headers=headers)
+
+
+@v1_router.post("/storages/{storage_id}/upload")
+async def v1_upload(
+    storage_id: str,
+    path: str = Form(""),
+    file: UploadFile = File(...),
+    key: dict = Depends(get_api_client),
+):
+    backend, sdoc = await _resolve_backend_apikey(storage_id, key, need_write=True)
+    try:
+        def do_upload():
+            _ensure_dir(backend, path)
+            return backend.upload(path, file.file, file.filename)
+        stored = await run_in_threadpool(do_upload)
+        await _invalidate_usage(storage_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Upload failed: {humanize_storage_error(e)}")
+    await log_api_activity(key, "api_upload", sdoc, stored)
+    return {"status": "uploaded", "path": stored}
+
+
+@v1_router.post("/storages/{storage_id}/folder")
+async def v1_folder(storage_id: str, body: FolderBody, key: dict = Depends(get_api_client)):
+    backend, sdoc = await _resolve_backend_apikey(storage_id, key, need_write=True)
+    try:
+        await run_in_threadpool(backend.mkdir, body.path, body.name)
+        await _invalidate_usage(storage_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=humanize_storage_error(e))
+    target = f"{body.path}/{body.name}".strip("/")
+    await log_api_activity(key, "api_create_folder", sdoc, target)
+    return {"status": "created", "path": target}
+
+
+@v1_router.delete("/storages/{storage_id}/files")
+async def v1_delete(storage_id: str, path: str, is_dir: bool = False, key: dict = Depends(get_api_client)):
+    backend, sdoc = await _resolve_backend_apikey(storage_id, key, need_write=True)
+    try:
+        await run_in_threadpool(backend.delete, path, is_dir)
+        await _invalidate_usage(storage_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=humanize_storage_error(e))
+    await log_api_activity(key, "api_delete", sdoc, path)
+    return {"status": "deleted"}
+
+
 # ---------------------------------------------------------------- app wiring
 app.include_router(api_router)
+app.include_router(v1_router)
 
 _cors_env = os.environ.get("CORS_ORIGINS", "*")
 _cors_origins = [o.strip() for o in _cors_env.split(",") if o.strip()] or ["*"]
@@ -1164,6 +1501,8 @@ async def on_startup():
     await db.activity_logs.create_index("action")
     await db.shares.create_index("token", unique=True)
     await db.shares.create_index("created_by")
+    await db.api_keys.create_index("key_hash", unique=True)
+    await db.api_keys.create_index([("created_at", -1)])
     await seed_admin()
 
 

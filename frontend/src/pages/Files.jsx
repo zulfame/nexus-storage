@@ -104,6 +104,8 @@ export default function Files() {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploadInitial, setUploadInitial] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [dragItem, setDragItem] = useState(null);
+  const [dragOverPath, setDragOverPath] = useState(null);
   const [renameItem, setRenameItem] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [moveCopy, setMoveCopy] = useState(null); // { item, mode }
@@ -224,18 +226,69 @@ export default function Files() {
     if (fs.length) openUpload(fs);
   };
 
-  const dismissDownload = (id) => setDownloads((d) => d.filter((x) => x.id !== id));
+  const startItemDrag = (e, item) => {
+    if (!canWrite) return;
+    setDragItem(item);
+    e.dataTransfer.effectAllowed = "move";
+    try { e.dataTransfer.setData("text/plain", item.path); } catch {}
+  };
+  const endItemDrag = () => { setDragItem(null); setDragOverPath(null); };
+
+  const folderDragOver = (e, targetPath) => {
+    if (!dragItem) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.dataTransfer.dropEffect = "move";
+    if (dragOverPath !== targetPath) setDragOverPath(targetPath);
+  };
+
+  const moveItemTo = async (item, destPath) => {
+    const srcParent = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/")) : "";
+    if (destPath === srcParent) return; // already there
+    if (item.is_dir && (destPath === item.path || destPath.startsWith(item.path + "/"))) {
+      return toast.error("Can't move a folder into itself");
+    }
+    const dst = destPath ? `${destPath}/${item.name}` : item.name;
+    try {
+      await api.post(`/storages/${active.id}/files/move`, { src: item.path, dst, is_dir: item.is_dir, copy: false });
+      toast.success(`Moved "${item.name}"${destPath ? ` to ${destPath.split("/").pop()}` : " to root"}`);
+      loadFiles(path);
+    } catch (e) {
+      toast.error(apiError(e, "Move failed"));
+    }
+  };
+
+  const folderDrop = (e, targetPath, targetItem) => {
+    if (!dragItem) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const it = dragItem;
+    endItemDrag();
+    if (targetItem && it.path === targetItem.path) return;
+    moveItemTo(it, targetPath);
+  };
+
+  const dismissDownload = (id) =>
+    setDownloads((d) => {
+      const it = d.find((x) => x.id === id);
+      if (it?.status === "downloading" && it.controller) {
+        try { it.controller.abort(); } catch {}
+      }
+      return d.filter((x) => x.id !== id);
+    });
 
   const download = async (item) => {
     const id = `${item.path}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const controller = new AbortController();
     setDownloads((d) => [
       ...d,
-      { id, name: item.name, loaded: 0, total: item.size || 0, status: "downloading" },
+      { id, name: item.name, loaded: 0, total: item.size || 0, status: "downloading", controller },
     ]);
     try {
       const res = await api.get(`/storages/${active.id}/files/download`, {
         params: { path: item.path },
         responseType: "blob",
+        signal: controller.signal,
         onDownloadProgress: (e) => {
           const total = e.total || item.size || 0;
           setDownloads((d) => d.map((x) => (x.id === id ? { ...x, loaded: e.loaded, total } : x)));
@@ -248,11 +301,15 @@ export default function Files() {
       a.click();
       URL.revokeObjectURL(url);
       setDownloads((d) => d.map((x) => (x.id === id ? { ...x, status: "done", loaded: x.total || x.loaded } : x)));
-      setTimeout(() => dismissDownload(id), 3000);
+      setTimeout(() => setDownloads((d) => d.filter((x) => x.id !== id)), 3000);
     } catch (e) {
+      if (controller.signal.aborted || e?.code === "ERR_CANCELED" || e?.name === "CanceledError") {
+        setDownloads((d) => d.filter((x) => x.id !== id));
+        return;
+      }
       toast.error(apiError(e, "Download failed"));
       setDownloads((d) => d.map((x) => (x.id === id ? { ...x, status: "error" } : x)));
-      setTimeout(() => dismissDownload(id), 5000);
+      setTimeout(() => setDownloads((d) => d.filter((x) => x.id !== id)), 5000);
     }
   };
 
@@ -545,7 +602,13 @@ export default function Files() {
                 {(() => { const Ic = storageMeta(active.type).icon; return <Ic size={16} />; })()}
               </span>
               <div className="flex items-center gap-1.5 text-sm min-w-0 flex-1 overflow-hidden" data-testid="breadcrumbs">
-                <button onClick={() => goTo("")} className="font-semibold text-blue-600 hover:underline shrink-0 max-w-[40vw] sm:max-w-[220px] truncate">{active.name}</button>
+                <button
+                  onClick={() => goTo("")}
+                  onDragOver={(e) => folderDragOver(e, "")}
+                  onDragLeave={() => setDragOverPath(null)}
+                  onDrop={(e) => folderDrop(e, "")}
+                  className={`font-semibold shrink-0 max-w-[40vw] sm:max-w-[220px] truncate rounded px-1 ${dragItem && dragOverPath === "" ? "bg-blue-100 text-blue-700 ring-1 ring-blue-400" : "text-blue-600 hover:underline"}`}
+                >{active.name}</button>
                 {(() => {
                   const TAIL = 2;
                   const collapse = crumbs.length > TAIL + 1;
@@ -586,7 +649,10 @@ export default function Files() {
                             <ChevronRight size={13} className="text-gray-300 shrink-0" />
                             <button
                               onClick={() => goTo(p)}
-                              className={`truncate max-w-[30vw] sm:max-w-[200px] ${isLast ? "font-medium text-gray-900" : "text-gray-500 hover:text-gray-900"}`}
+                              onDragOver={(e) => folderDragOver(e, p)}
+                              onDragLeave={() => setDragOverPath(null)}
+                              onDrop={(e) => folderDrop(e, p)}
+                              className={`truncate max-w-[30vw] sm:max-w-[200px] rounded px-1 ${dragItem && dragOverPath === p ? "bg-blue-100 text-blue-700 ring-1 ring-blue-400" : isLast ? "font-medium text-gray-900" : "text-gray-500 hover:text-gray-900"}`}
                               title={c}
                             >
                               {c}
@@ -616,7 +682,7 @@ export default function Files() {
 
             <div
               className="p-4 sm:p-6 relative"
-              onDragOver={(e) => { if (canWrite) { e.preventDefault(); setDragging(true); } }}
+              onDragOver={(e) => { if (canWrite && !dragItem) { e.preventDefault(); setDragging(true); } }}
               onDragLeave={(e) => { if (e.currentTarget === e.target) setDragging(false); }}
               onDrop={onDrop}
             >
@@ -722,12 +788,19 @@ export default function Files() {
                     const Ic = item.is_dir ? Folder : meta.icon;
                     const isImg = !item.is_dir && categoryOf(item.name) === "image";
                     const isSel = selected.has(item.path);
+                    const isDropTgt = item.is_dir && dragItem && dragOverPath === item.path && dragItem.path !== item.path;
                     return (
                       <ItemMenu key={item.path} item={item}>
                       <div
                         data-testid={`file-card-${item.name}`}
                         onDoubleClick={() => openItem(item)}
-                        className={`group relative bg-white border rounded-2xl p-4 flex flex-col items-center text-center hover:shadow-md transition-all cursor-pointer ${isSel ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/40" : "border-gray-200 hover:border-blue-200"}`}
+                        draggable={canWrite}
+                        onDragStart={(e) => startItemDrag(e, item)}
+                        onDragEnd={endItemDrag}
+                        onDragOver={item.is_dir ? (e) => folderDragOver(e, item.path) : undefined}
+                        onDragLeave={item.is_dir ? () => setDragOverPath(null) : undefined}
+                        onDrop={item.is_dir ? (e) => folderDrop(e, item.path, item) : undefined}
+                        className={`group relative bg-white border rounded-2xl p-4 flex flex-col items-center text-center hover:shadow-md transition-all cursor-pointer ${isDropTgt ? "border-blue-500 ring-2 ring-blue-300 bg-blue-50" : isSel ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/40" : "border-gray-200 hover:border-blue-200"}`}
                         onClick={() => openItem(item)}
                       >
                         <button
@@ -793,9 +866,20 @@ export default function Files() {
                           const meta = fileMeta(item.name);
                           const Ic = item.is_dir ? Folder : meta.icon;
                           const isSel = selected.has(item.path);
+                          const isDropTgt = item.is_dir && dragItem && dragOverPath === item.path && dragItem.path !== item.path;
                           return (
                             <ItemMenu key={item.path} item={item}>
-                            <tr className={`border-b border-gray-100 last:border-0 transition-colors group cursor-pointer ${isSel ? "bg-blue-50 hover:bg-blue-50" : "hover:bg-gray-50"}`} data-testid={`file-row-${item.name}`} onClick={() => openItem(item)}>
+                            <tr
+                              className={`border-b border-gray-100 last:border-0 transition-colors group cursor-pointer ${isDropTgt ? "bg-blue-100 ring-1 ring-inset ring-blue-400" : isSel ? "bg-blue-50 hover:bg-blue-50" : "hover:bg-gray-50"}`}
+                              data-testid={`file-row-${item.name}`}
+                              onClick={() => openItem(item)}
+                              draggable={canWrite}
+                              onDragStart={(e) => startItemDrag(e, item)}
+                              onDragEnd={endItemDrag}
+                              onDragOver={item.is_dir ? (e) => folderDragOver(e, item.path) : undefined}
+                              onDragLeave={item.is_dir ? () => setDragOverPath(null) : undefined}
+                              onDrop={item.is_dir ? (e) => folderDrop(e, item.path, item) : undefined}
+                            >
                               <td className="pl-4 pr-1 py-2.5" onClick={(e) => e.stopPropagation()}>
                                 <button
                                   onClick={() => toggleSelect(item)}

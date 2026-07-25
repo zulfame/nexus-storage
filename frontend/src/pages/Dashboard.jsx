@@ -54,16 +54,17 @@ export default function Dashboard() {
   }, []);
 
   const s = stats || {};
+  const isAdmin = s.is_admin;
 
   return (
     <div>
       <PageHeader overline="Overview" title="Dashboard" />
       <div className="p-4 sm:p-8 space-y-6">
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-2 gap-4 ${isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-3"}`}>
           <Stat label="Total Storages" value={s.total_storages ?? "—"} icon={HardDrive} accent="#2563eb" />
           <Stat label="Storage Used" value={s.total_used_bytes != null ? fmtBytes(s.total_used_bytes) : "—"} icon={Database} accent="#0891b2" />
           <Stat label="Shared Links" value={s.share_count ?? "—"} icon={Share2} accent="#db2777" />
-          <Stat label="Users" value={s.total_users ?? "—"} icon={Users} accent="#7c3aed" />
+          {isAdmin && <Stat label="Users" value={s.total_users ?? "—"} icon={Users} accent="#7c3aed" />}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -77,6 +78,7 @@ export default function Dashboard() {
                 <Bar label="SFTP" value={s.sftp_count || 0} total={s.total_storages || 0} color="#7c3aed" icon={HardDrive} />
               </div>
             </div>
+            {isAdmin && (
             <div className="bg-white border border-gray-200 rounded-2xl shadow-sm p-6">
               <h3 className="font-display font-semibold text-lg text-gray-900 mb-5">Team</h3>
               <div className="flex items-center gap-4">
@@ -90,6 +92,7 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+            )}
           </div>
 
           {/* recent activity */}
