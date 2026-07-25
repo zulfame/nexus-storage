@@ -51,11 +51,11 @@ export default function Login() {
             {tagline}
           </h1>
           <p className="text-blue-100 mt-5 text-base leading-relaxed">
-            Connect S3 buckets and Samba shares, control who can access what, and manage files
-            with a familiar drive-like experience.
+            Connect S3 buckets, Samba shares and SFTP servers, control who can access what, and
+            manage files with a familiar drive-like experience.
           </p>
-          <div className="flex gap-6 mt-10">
-            {[{ i: Cloud, t: "AWS S3" }, { i: HardDrive, t: "MinIO / Wasabi" }, { i: Server, t: "Samba / SMB" }].map(({ i: Ic, t }) => (
+          <div className="flex flex-wrap gap-x-6 gap-y-3 mt-10">
+            {[{ i: Cloud, t: "AWS S3" }, { i: HardDrive, t: "SFTP" }, { i: Server, t: "Samba / SMB" }].map(({ i: Ic, t }) => (
               <div key={t} className="flex items-center gap-2 text-sm text-blue-50">
                 <Ic size={18} /> {t}
               </div>

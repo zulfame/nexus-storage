@@ -28,6 +28,9 @@ import {
   FolderInput,
   Copy as CopyIcon,
   FolderOpen,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUpDown,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -53,6 +56,14 @@ function fmtSize(n) {
     i++;
   }
   return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`;
+}
+
+function fmtDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d)) return "—";
+  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }) +
+    ", " + d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 }
 
 function storageIcon(type, size = 16) {
@@ -83,7 +94,11 @@ export default function Files() {
   const [renameItem, setRenameItem] = useState(null);
   const [renameValue, setRenameValue] = useState("");
   const [moveCopy, setMoveCopy] = useState(null); // { item, mode }
+  const [sort, setSort] = useState({ key: "name", dir: "asc" });
   const reqId = useRef(0);
+
+  const toggleSort = (key) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
 
   const openUpload = (files) => {
     setUploadInitial(files && files.length ? files : null);
@@ -222,9 +237,37 @@ export default function Files() {
     }
   };
 
-  const filtered = query.trim()
+  const searched = query.trim()
     ? items.filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()))
     : items;
+
+  const filtered = [...searched].sort((a, b) => {
+    if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1; // folders always first
+    const mul = sort.dir === "asc" ? 1 : -1;
+    let av, bv;
+    if (sort.key === "size") { av = a.size || 0; bv = b.size || 0; }
+    else if (sort.key === "modified") { av = a.modified ? Date.parse(a.modified) : 0; bv = b.modified ? Date.parse(b.modified) : 0; }
+    else { av = a.name.toLowerCase(); bv = b.name.toLowerCase(); }
+    if (av < bv) return -1 * mul;
+    if (av > bv) return 1 * mul;
+    return 0;
+  });
+
+  const SortHeader = ({ label, sortKey, className = "" }) => {
+    const active = sort.key === sortKey;
+    return (
+      <th className={`px-4 py-2.5 ${className}`}>
+        <button
+          onClick={() => toggleSort(sortKey)}
+          data-testid={`sort-${sortKey}`}
+          className={`inline-flex items-center gap-1 overline transition-colors ${active ? "text-blue-600" : "hover:text-gray-700"}`}
+        >
+          {label}
+          {active ? (sort.dir === "asc" ? <ArrowUp size={12} /> : <ArrowDown size={12} />) : <ChevronsUpDown size={12} className="text-gray-300" />}
+        </button>
+      </th>
+    );
+  };
 
   const ItemMenu = ({ item, children }) => (
     <ContextMenu>
@@ -398,13 +441,33 @@ export default function Files() {
                   />
                 </div>
                 <div className="text-xs text-gray-400 hidden sm:block">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</div>
-                <div className="ml-auto flex items-center bg-white border border-gray-200 rounded-xl p-1">
-                  <button onClick={() => setViewMode("list")} data-testid="view-list-button" aria-label="List view" className={`p-1.5 rounded-lg transition-colors ${view === "list" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
-                    <ListIcon size={16} />
-                  </button>
-                  <button onClick={() => setViewMode("grid")} data-testid="view-grid-button" aria-label="Grid view" className={`p-1.5 rounded-lg transition-colors ${view === "grid" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
-                    <LayoutGrid size={16} />
-                  </button>
+                <div className="ml-auto flex items-center gap-2">
+                  {view === "grid" && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button data-testid="grid-sort-button" className="flex items-center gap-1.5 text-sm font-medium border border-gray-200 bg-white px-3 py-2 rounded-xl text-gray-600 hover:bg-gray-50 transition-colors">
+                          <ChevronsUpDown size={14} />
+                          <span className="hidden sm:inline">Sort: {sort.key === "modified" ? "Date" : sort.key === "size" ? "Size" : "Name"}</span>
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-40">
+                        {[["name", "Name"], ["size", "Size"], ["modified", "Date modified"]].map(([k, label]) => (
+                          <DropdownMenuItem key={k} onClick={() => toggleSort(k)} className="cursor-pointer flex items-center justify-between">
+                            {label}
+                            {sort.key === k && (sort.dir === "asc" ? <ArrowUp size={13} /> : <ArrowDown size={13} />)}
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1">
+                    <button onClick={() => setViewMode("list")} data-testid="view-list-button" aria-label="List view" className={`p-1.5 rounded-lg transition-colors ${view === "list" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
+                      <ListIcon size={16} />
+                    </button>
+                    <button onClick={() => setViewMode("grid")} data-testid="view-grid-button" aria-label="Grid view" className={`p-1.5 rounded-lg transition-colors ${view === "grid" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>
+                      <LayoutGrid size={16} />
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -459,11 +522,12 @@ export default function Files() {
               ) : (
                 <div className="bg-white border border-gray-200 rounded-2xl shadow-sm overflow-hidden">
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm min-w-[520px]">
+                    <table className="w-full text-sm min-w-[640px]">
                       <thead>
                         <tr className="bg-gray-50 text-left border-b border-gray-200">
-                          <th className="px-4 py-2.5 overline">Name</th>
-                          <th className="px-4 py-2.5 overline w-32">Size</th>
+                          <SortHeader label="Name" sortKey="name" />
+                          <SortHeader label="Size" sortKey="size" className="w-32" />
+                          <SortHeader label="Modified" sortKey="modified" className="w-48 hidden sm:table-cell" />
                           <th className="px-4 py-2.5 overline w-28 text-right">Actions</th>
                         </tr>
                       </thead>
@@ -487,6 +551,7 @@ export default function Files() {
                                 </div>
                               </td>
                               <td className="px-4 py-2.5 text-gray-500">{item.is_dir ? "—" : fmtSize(item.size)}</td>
+                              <td className="px-4 py-2.5 text-gray-500 hidden sm:table-cell whitespace-nowrap">{fmtDate(item.modified)}</td>
                               <td className="px-4 py-2.5" onClick={(e) => e.stopPropagation()}>
                                 <div className="flex items-center justify-end gap-1.5">
                                   {!item.is_dir && isPreviewable(item.name) && (
