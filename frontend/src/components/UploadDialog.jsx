@@ -18,28 +18,62 @@ export function UploadDialog({ storageId, path, initialFiles, onClose, onDone })
   const [busy, setBusy] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const inputRef = useRef(null);
+  const folderRef = useRef(null);
   const startedRef = useRef(false);
+
+  const CHUNK = 5 * 1024 * 1024;
+  const CHUNK_THRESHOLD = 8 * 1024 * 1024;
+
+  const relOf = (f) => (f.webkitRelativePath && f.webkitRelativePath.length ? f.webkitRelativePath : f.name);
+  const joinPath = (a, b) => [a, b].filter(Boolean).join("/");
+
+  const uploadSimple = async (file, targetPath, name, onPct) => {
+    const fd = new FormData();
+    fd.append("path", targetPath);
+    // preserve intended filename (in case of nested folder upload)
+    fd.append("file", file, name);
+    await api.post(`/storages/${storageId}/files/upload`, fd, {
+      onUploadProgress: (e) => e.total && onPct(Math.round((e.loaded * 100) / e.total)),
+    });
+  };
+
+  const uploadChunked = async (file, targetPath, name, onPct) => {
+    const uploadId = (window.crypto?.randomUUID?.() || Math.random().toString(36).slice(2)).replace(/-/g, "").slice(0, 32);
+    const total = Math.ceil(file.size / CHUNK);
+    for (let c = 0; c < total; c++) {
+      const slice = file.slice(c * CHUNK, Math.min(file.size, (c + 1) * CHUNK));
+      const fd = new FormData();
+      fd.append("upload_id", uploadId);
+      fd.append("index", c);
+      fd.append("chunk", slice);
+      await api.post(`/storages/${storageId}/files/chunk`, fd, {
+        onUploadProgress: (e) => {
+          const loaded = c * CHUNK + (e.loaded || 0);
+          onPct(Math.min(99, Math.round((loaded * 100) / file.size)));
+        },
+      });
+    }
+    await api.post(`/storages/${storageId}/files/chunk/complete`, { upload_id: uploadId, path: targetPath, filename: name });
+  };
 
   const runUploads = async (files) => {
     if (!files.length) return;
-    setRows(files.map((f) => ({ file: f, pct: 0, status: "pending", error: "" })));
+    setRows(files.map((f) => ({ file: f, pct: 0, status: "pending", error: "", rel: relOf(f) })));
     setPhase("progress");
     setBusy(true);
     let done = 0;
     let failed = 0;
     for (let i = 0; i < files.length; i++) {
       setRows((r) => r.map((x, idx) => (idx === i ? { ...x, status: "uploading" } : x)));
-      const fd = new FormData();
-      fd.append("path", path);
-      fd.append("file", files[i]);
+      const file = files[i];
+      const rel = relOf(file);
+      const subdir = rel.includes("/") ? rel.slice(0, rel.lastIndexOf("/")) : "";
+      const name = rel.slice(rel.lastIndexOf("/") + 1);
+      const targetPath = joinPath(path, subdir);
+      const onPct = (p) => setRows((r) => r.map((x, idx) => (idx === i ? { ...x, pct: p } : x)));
       try {
-        await api.post(`/storages/${storageId}/files/upload`, fd, {
-          onUploadProgress: (e) => {
-            if (!e.total) return;
-            const p = Math.round((e.loaded * 100) / e.total);
-            setRows((r) => r.map((x, idx) => (idx === i ? { ...x, pct: p } : x)));
-          },
-        });
+        if (file.size > CHUNK_THRESHOLD) await uploadChunked(file, targetPath, name, onPct);
+        else await uploadSimple(file, targetPath, name, onPct);
         done++;
         setRows((r) => r.map((x, idx) => (idx === i ? { ...x, pct: 100, status: "done" } : x)));
       } catch (err) {
@@ -123,7 +157,17 @@ export function UploadDialog({ storageId, path, initialFiles, onClose, onDone })
                 <div className="text-xs text-gray-400 mt-0.5">or <span className="text-blue-600 font-medium">click to browse</span></div>
               </div>
             </button>
+            <button
+              type="button"
+              data-testid="upload-folder-button"
+              onClick={() => folderRef.current?.click()}
+              className="mt-3 w-full flex items-center justify-center gap-2 text-sm font-medium border border-gray-200 rounded-xl py-2.5 text-gray-600 hover:bg-gray-50 hover:border-blue-300 hover:text-blue-600 transition-colors"
+            >
+              <FolderUp size={15} /> Upload a folder
+            </button>
             <input ref={inputRef} type="file" multiple className="hidden" data-testid="upload-input" onChange={(e) => pickFiles(e.target.files)} />
+            <input ref={folderRef} type="file" webkitdirectory="" directory="" multiple className="hidden" data-testid="upload-folder-input" onChange={(e) => pickFiles(e.target.files)} />
+            <div className="text-[11px] text-gray-400 text-center mt-3">Large files upload in chunks automatically.</div>
           </div>
         ) : (
           <div className="p-4 space-y-3 max-h-[50vh] overflow-y-auto" data-testid="upload-list">
@@ -137,7 +181,7 @@ export function UploadDialog({ storageId, path, initialFiles, onClose, onDone })
                   </span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-medium text-gray-800 truncate">{r.file.name}</span>
+                      <span className="text-xs font-medium text-gray-800 truncate">{r.rel || r.file.name}</span>
                       <span className="text-[11px] text-gray-400 shrink-0">
                         {r.status === "done" ? <CheckCircle2 size={14} className="text-green-500 inline" /> :
                          r.status === "error" ? <AlertCircle size={14} className="text-red-500 inline" /> :

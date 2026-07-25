@@ -809,7 +809,7 @@ class TestLogs:
         # NOTE: totals can drift by a few because parallel workers insert logs between calls.
         # Instead validate that returned items respect the filter and totals sum ~== all total.
         assert abs((r_file["total"] + r_conn["total"]) - r_all["total"]) <= 5
-        file_actions = {"upload", "delete", "delete_folder", "create_folder"}
+        file_actions = {"upload", "delete", "delete_folder", "create_folder", "move", "copy", "transfer", "share"}
         for it in r_file["items"]:
             assert it["action"] in file_actions
         for it in r_conn["items"]:

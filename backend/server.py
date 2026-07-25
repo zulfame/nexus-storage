@@ -533,7 +533,10 @@ async def upload_file(
 ):
     backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
     try:
-        key = await run_in_threadpool(backend.upload, path, file.file, file.filename)
+        def do_upload():
+            _ensure_dir(backend, path)
+            return backend.upload(path, file.file, file.filename)
+        key = await run_in_threadpool(do_upload)
         await log_activity(user, "upload", sdoc, key)
         await _log_reconnect(user, backend, sdoc, key)
         return {"status": "uploaded", "path": key}
@@ -611,6 +614,117 @@ async def move_file(storage_id: str, body: MoveBody, user: dict = Depends(get_cu
         raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"{'Copy' if body.copy else 'Move'} failed: {humanize_storage_error(e)}")
+
+
+# ---------------------------------------------------------------- recursive search
+@api_router.get("/storages/{storage_id}/files/search")
+async def search_files(storage_id: str, q: str = "", path: str = "", user: dict = Depends(get_current_user)):
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=False)
+    ql = q.strip().lower()
+    if not ql:
+        return {"items": []}
+
+    def walk():
+        results = []
+        stack = [path.strip("/")]
+        visited = 0
+        while stack and len(results) < 500 and visited < 8000:
+            cur = stack.pop()
+            try:
+                items = backend.list(cur)
+            except Exception:
+                continue
+            for it in items:
+                visited += 1
+                if ql in it["name"].lower():
+                    results.append(it)
+                if it["is_dir"]:
+                    stack.append(it["path"])
+        return results
+
+    try:
+        items = await run_in_threadpool(walk)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Search failed: {humanize_storage_error(e)}")
+    return {"items": items}
+
+
+# ---------------------------------------------------------------- chunked upload
+CHUNK_DIR = os.path.join(LOCAL_STORAGE_DIR, "chunk_uploads")
+os.makedirs(CHUNK_DIR, exist_ok=True)
+
+
+def _ensure_dir(backend, path: str):
+    parts = [p for p in (path or "").split("/") if p]
+    cur = ""
+    for p in parts:
+        try:
+            backend.mkdir(cur, p)
+        except Exception:
+            pass
+        cur = f"{cur}/{p}" if cur else p
+
+
+@api_router.post("/storages/{storage_id}/files/chunk")
+async def upload_chunk(
+    storage_id: str,
+    upload_id: str = Form(...),
+    index: int = Form(...),
+    chunk: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    await _resolve_backend(storage_id, user, need_write=True)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", upload_id):
+        raise HTTPException(status_code=400, detail="Invalid upload id")
+    tmp = os.path.join(CHUNK_DIR, f"{storage_id}_{upload_id}")
+
+    def write_chunk():
+        mode = "wb" if index == 0 else "ab"
+        with open(tmp, mode) as f:
+            f.write(chunk.file.read())
+
+    await run_in_threadpool(write_chunk)
+    return {"status": "ok", "index": index}
+
+
+class ChunkCompleteBody(BaseModel):
+    upload_id: str
+    path: str = ""
+    filename: str
+
+
+@api_router.post("/storages/{storage_id}/files/chunk/complete")
+async def upload_chunk_complete(storage_id: str, body: ChunkCompleteBody, user: dict = Depends(get_current_user)):
+    backend, sdoc = await _resolve_backend(storage_id, user, need_write=True)
+    if not re.fullmatch(r"[A-Za-z0-9_-]{6,64}", body.upload_id):
+        raise HTTPException(status_code=400, detail="Invalid upload id")
+    tmp = os.path.join(CHUNK_DIR, f"{storage_id}_{body.upload_id}")
+    if not os.path.exists(tmp):
+        raise HTTPException(status_code=400, detail="No uploaded chunks found")
+
+    def finalize():
+        _ensure_dir(backend, body.path)
+        with open(tmp, "rb") as f:
+            key = backend.upload(body.path, f, body.filename)
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        return key
+
+    try:
+        key = await run_in_threadpool(finalize)
+        await log_activity(user, "upload", sdoc, key)
+        await _log_reconnect(user, backend, sdoc, key)
+        return {"status": "uploaded", "path": key}
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            os.remove(tmp)
+        except Exception:
+            pass
+        raise HTTPException(status_code=400, detail=f"Upload failed: {humanize_storage_error(e)}")
 
 
 # ---------------------------------------------------------------- usage metrics

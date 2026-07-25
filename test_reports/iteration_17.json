@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 17 P2 testing: STORAGE_ENCRYPTION_KEY backward-compat, recursive 'Everywhere' search, folder upload + automatic chunked upload >8MB. Added /app/backend/tests/test_p2_iter17.py with 6 tests (encryption regression x2, recursive search x3, chunked upload roundtrip x1) — all pass. Also fixed a stale assertion in backend_test.py TestLogs.test_logs_category_filter (FILE_ACTIONS now includes move/copy/transfer/share). Frontend UI verified end-to-end on P2_sftp: (a) 'Everywhere' scope returned root_report.txt + docs/report_inner.txt + docs/sub/deep_report.txt while 'This folder' correctly hid the nested matches; (b) upload-folder-button + hidden upload-folder-input with webkitdirectory attribute present; (c) small file upload succeeded with progress + toast + listing appearance; (d) 9MB chunked upload completed successfully (2×5MB chunks to /files/chunk then /files/chunk/complete) — file appeared in listing with size '9.0 MB'; (e) preview modal still opens for txt files (regression OK). All uploaded test artifacts were cleaned up.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/storages/{id}/files/transfer", "issue": "Two pre-existing iteration-16 tests (TestTransfer.test_cross_storage_copy/move) fail with 'Path not found' because the destination SFTP created with base_path='upload' relies on the 'upload' folder pre-existing on the SFTP server — flaky when the folder was removed by prior cleanup. Not a regression from iter17, but consider auto-creating base_path on storage add or making these tests create the folder first."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_p2_iter17.py",
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/iter17.xml"
+  ],
+  "action_items": [
+    "(Optional) Make TestTransfer create the dest base_path='upload' folder on the SFTP server before transfer, or drop base_path='upload' — currently intermittently fails when SFTP folder is missing.",
+    "(Nice-to-have) Auto-invalidate storage usage doc on upload/delete/transfer (also called out in iter16)."
+  ],
+  "critical_code_review_comments": [
+    "UploadDialog.jsx chunked upload uses a single sequential loop with no retry on chunk failure — if any chunk POST 5xx's mid-upload the entire upload is lost. Consider a per-chunk retry (2-3 attempts with backoff).",
+    "server.py /files/chunk stores chunks by upload_id — ensure there is a TTL/cleanup for orphaned chunk uploads that never call /chunk/complete (otherwise disk/temp fills up).",
+    "Files.jsx recursive search: results are merged into the sorted list but the returned items presumably carry their full 'path'. Verify the UI clearly indicates the containing folder when in 'Everywhere' scope (e.g. show 'docs/sub/deep_report.txt') so users can distinguish duplicates by name."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_p2_iter17.py",
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "97% (66/68 — 2 flaky iter16 transfer tests unrelated to iter17)", "frontend": "100%"},
+  "seed_data_creation": "Tests upload/delete their own temp files under P2_sftp; two artifacts left over from a prior test run (mv_ff0b7c.txt, xfer_745008.txt) were also cleaned up. All test uploads deleted at end.",
+  "test_credentials": "admin@example.com / admin123",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Iter17 endpoints: GET /api/storages/{id}/files/search?q=&path= (returns {items:[{name,path,is_dir,size,modified}]} recursively, capped); POST /api/storages/{id}/files/chunk (multipart form: upload_id, index, chunk); POST /api/storages/{id}/files/chunk/complete (json: upload_id, path, filename). Frontend testids: file-search-input, search-scope-folder, search-scope-all, upload-file-button, upload-dialog, upload-dropzone, upload-input, upload-folder-button, upload-folder-input (has webkitdirectory), upload-list, upload-done-button, upload-close-button. UI login redirects to '/' (not '/dashboard'); wait for nav-files instead. Preview modal doesn't reliably close via Escape — use [data-testid='preview-close-button'] or click the X icon; be sure to close before other interactions. TestTransfer pre-existing flakiness: destination SFTP base_path='upload' — folder must exist on server first.",
+  "rca_of_the_issue": "All iter17 features work correctly. Two pre-existing iter16 tests fail because they depend on an 'upload' subfolder on the SFTP server that isn't guaranteed to exist between runs; unrelated to the new encryption/search/chunked-upload work."
+}

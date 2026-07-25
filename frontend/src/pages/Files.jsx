@@ -98,6 +98,9 @@ export default function Files() {
   const [moveCopy, setMoveCopy] = useState(null); // { item, mode }
   const [shareItem, setShareItem] = useState(null);
   const [sort, setSort] = useState({ key: "name", dir: "asc" });
+  const [searchScope, setSearchScope] = useState("folder"); // folder | all
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
   const reqId = useRef(0);
 
   const toggleSort = (key) =>
@@ -240,11 +243,28 @@ export default function Files() {
     }
   };
 
-  const searched = query.trim()
+  useEffect(() => {
+    if (searchScope !== "all" || !query.trim() || !active) return;
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const r = await api.get(`/storages/${active.id}/files/search`, { params: { q: query.trim(), path } });
+        setSearchResults(r.data.items || []);
+      } catch (e) {
+        toast.error(apiError(e, "Search failed"));
+      } finally {
+        setSearching(false);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [query, searchScope, active, path]);
+
+  const localFiltered = query.trim()
     ? items.filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()))
     : items;
+  const rawList = searchScope === "all" && query.trim() ? searchResults : localFiltered;
 
-  const filtered = [...searched].sort((a, b) => {
+  const filtered = [...rawList].sort((a, b) => {
     if (a.is_dir !== b.is_dir) return a.is_dir ? -1 : 1; // folders always first
     const mul = sort.dir === "asc" ? 1 : -1;
     let av, bv;
@@ -439,10 +459,14 @@ export default function Files() {
                   <input
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search in this folder…"
+                    placeholder={searchScope === "all" ? "Search entire storage…" : "Search in this folder…"}
                     data-testid="file-search-input"
                     className="w-full bg-white border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-blue-100 transition-colors"
                   />
+                </div>
+                <div className="flex items-center bg-white border border-gray-200 rounded-xl p-1 text-xs font-medium">
+                  <button onClick={() => setSearchScope("folder")} data-testid="search-scope-folder" className={`px-2.5 py-1 rounded-lg transition-colors ${searchScope === "folder" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>This folder</button>
+                  <button onClick={() => setSearchScope("all")} data-testid="search-scope-all" className={`px-2.5 py-1 rounded-lg transition-colors ${searchScope === "all" ? "bg-blue-50 text-blue-600" : "text-gray-400 hover:text-gray-600"}`}>Everywhere</button>
                 </div>
                 <div className="text-xs text-gray-400 hidden sm:block">{filtered.length} item{filtered.length !== 1 ? "s" : ""}</div>
                 <div className="ml-auto flex items-center gap-2">
@@ -475,11 +499,11 @@ export default function Files() {
                 </div>
               </div>
 
-              {loading ? (
+              {loading || searching ? (
                 <div className="py-20 text-center text-gray-400"><Loader2 size={22} className="animate-spin inline" /></div>
               ) : filtered.length === 0 ? (
                 <div className="py-20 text-center text-gray-400 text-sm bg-white border border-gray-200 rounded-2xl">
-                  {query.trim() ? "No files match your search." : "This folder is empty."}
+                  {query.trim() ? (searchScope === "all" ? "No files match across this storage." : "No files match your search.") : "This folder is empty."}
                 </div>
               ) : view === "grid" ? (
                 <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-3" data-testid="file-list">
