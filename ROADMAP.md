@@ -16,7 +16,7 @@ These are UX/polish ideas surfaced across sessions. Small-to-medium effort, high
 |---|-------------|------|-------|
 | PI-1 | **Real-time connection status** (online/offline) badge on each storage card | Dashboard / List Storage | Periodic/background health check per storage so users see which NAS/bucket is reachable without clicking "Test". |
 | PI-2 | **UI consistency polish** across Dashboard, Logs Activity, Manage User, Manage App | Frontend | Bring the remaining admin pages to the same refined level as File Browser & List Storage (spacing, cards, empty states, micro-animations). |
-| PI-3 | **Multi-select + bulk actions** (move / copy / delete multiple items) | File Browser | Checkbox selection like Google Drive; batch operations against the move/delete endpoints. |
+| PI-3 | **Multi-select + bulk actions** (move / copy / delete / share / download multiple items) | File Browser | ✅ Implemented (2026-06). Checkbox selection + select-all, blue selection toolbar, bulk delete/move/copy/share/download. |
 | PI-4 | **Drag-to-move** between folders / onto breadcrumb | File Browser | Drag a file/folder onto a breadcrumb crumb or a folder row to move it. |
 | PI-5 | **Column sort** (name / size / modified) in list view | File Browser | Sort toggles on table headers. |
 | PI-6 | **Grid image thumbnails** | File Browser | ✅ Implemented (ThumbImage, lazy-loaded, cached). Kept here as reference. |
@@ -30,7 +30,7 @@ These are UX/polish ideas surfaced across sessions. Small-to-medium effort, high
 Core product is functional and verified.
 
 ### P1 — high priority
-- **FE-1: Multi-select & bulk file operations** (move/copy/delete many). Pairs with PI-3/PI-4.
+- **FE-1: Multi-select & bulk file operations** (move/copy/delete/share/download many). ✅ Implemented (2026-06).
 - **FE-2: Storage config validation** — enforce required fields per type on create/update; return
   `404` for unknown/malformed storage ids (currently generic errors).
 - **FE-3: SFTP private-key auth** — allow SSH key (and passphrase) in addition to password.

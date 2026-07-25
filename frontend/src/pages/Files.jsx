@@ -5,6 +5,7 @@ import { FilePreview } from "@/components/FilePreview";
 import { UploadDialog } from "@/components/UploadDialog";
 import { MoveCopyDialog } from "@/components/MoveCopyDialog";
 import { ShareDialog } from "@/components/ShareDialog";
+import { BulkShareDialog } from "@/components/BulkShareDialog";
 import { ThumbImage } from "@/components/ThumbImage";
 import { fileMeta, isPreviewable, categoryOf } from "@/lib/fileTypes";
 import { toast } from "sonner";
@@ -33,6 +34,9 @@ import {
   ArrowDown,
   ChevronsUpDown,
   Share2,
+  X,
+  CheckSquare,
+  Minus,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -101,7 +105,19 @@ export default function Files() {
   const [searchScope, setSearchScope] = useState("folder"); // folder | all
   const [searchResults, setSearchResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [selected, setSelected] = useState(() => new Set());
+  const [bulkMoveCopy, setBulkMoveCopy] = useState(null); // "move" | "copy"
+  const [bulkShare, setBulkShare] = useState(false);
   const reqId = useRef(0);
+
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+  const toggleSelect = (item) =>
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(item.path)) n.delete(item.path);
+      else n.add(item.path);
+      return n;
+    });
 
   const toggleSort = (key) =>
     setSort((s) => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: "asc" }));
@@ -151,13 +167,15 @@ export default function Files() {
     if (active) {
       setPath("");
       setQuery("");
+      clearSelection();
       loadFiles("");
     }
-  }, [active, loadFiles]);
+  }, [active, loadFiles, clearSelection]);
 
   const enter = (item) => {
     if (!item.is_dir) return;
     setQuery("");
+    clearSelection();
     setPath(item.path);
     loadFiles(item.path);
   };
@@ -170,6 +188,7 @@ export default function Files() {
 
   const goTo = (p) => {
     setQuery("");
+    clearSelection();
     setPath(p);
     loadFiles(p);
   };
@@ -275,6 +294,37 @@ export default function Files() {
     if (av > bv) return 1 * mul;
     return 0;
   });
+
+  const selectedItems = filtered.filter((i) => selected.has(i.path));
+  const selCount = selectedItems.length;
+  const allSelected = filtered.length > 0 && selCount === filtered.length;
+  const selectedFiles = selectedItems.filter((i) => !i.is_dir);
+  const toggleSelectAll = () =>
+    setSelected(allSelected ? new Set() : new Set(filtered.map((i) => i.path)));
+
+  const bulkDelete = async () => {
+    if (!selCount) return;
+    if (!window.confirm(`Delete ${selCount} selected item${selCount > 1 ? "s" : ""}?`)) return;
+    let ok = 0;
+    const failed = [];
+    for (const it of selectedItems) {
+      try {
+        await api.delete(`/storages/${active.id}/files`, { params: { path: it.path, is_dir: it.is_dir } });
+        ok++;
+      } catch {
+        failed.push(it.name);
+      }
+    }
+    if (failed.length) toast.warning(`Deleted ${ok}, ${failed.length} failed: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? "…" : ""}`);
+    else toast.success(`Deleted ${ok} item${ok > 1 ? "s" : ""}`);
+    clearSelection();
+    loadFiles(path);
+  };
+
+  const bulkDownload = () => {
+    if (!selectedFiles.length) return toast.error("Only files can be downloaded");
+    selectedFiles.forEach((f, i) => setTimeout(() => download(f), i * 300));
+  };
 
   const SortHeader = ({ label, sortKey, className = "" }) => {
     const active = sort.key === sortKey;
@@ -499,6 +549,41 @@ export default function Files() {
                 </div>
               </div>
 
+              {selCount > 0 && (
+                <div className="flex items-center gap-2 mb-4 bg-blue-600 text-white rounded-2xl px-3 sm:px-4 py-2.5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-150 flex-wrap" data-testid="selection-toolbar">
+                  <button onClick={clearSelection} data-testid="selection-clear" aria-label="Clear selection" className="h-7 w-7 flex items-center justify-center rounded-lg hover:bg-white/20 transition-colors shrink-0">
+                    <X size={16} />
+                  </button>
+                  <span className="text-sm font-semibold shrink-0" data-testid="selection-count">{selCount} selected</span>
+                  <div className="h-5 w-px bg-white/30 mx-1 hidden sm:block" />
+                  <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+                    {selectedFiles.length > 0 && (
+                      <button onClick={bulkDownload} data-testid="bulk-download-button" className="flex items-center gap-1.5 text-sm font-medium px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-white/20 transition-colors">
+                        <Download size={15} /> <span className="hidden sm:inline">Download</span>
+                      </button>
+                    )}
+                    {selectedFiles.length > 0 && (
+                      <button onClick={() => setBulkShare(true)} data-testid="bulk-share-button" className="flex items-center gap-1.5 text-sm font-medium px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-white/20 transition-colors">
+                        <Share2 size={15} /> <span className="hidden sm:inline">Share</span>
+                      </button>
+                    )}
+                    {canWrite && (
+                      <>
+                        <button onClick={() => setBulkMoveCopy("move")} data-testid="bulk-move-button" className="flex items-center gap-1.5 text-sm font-medium px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-white/20 transition-colors">
+                          <FolderInput size={15} /> <span className="hidden sm:inline">Move</span>
+                        </button>
+                        <button onClick={() => setBulkMoveCopy("copy")} data-testid="bulk-copy-button" className="flex items-center gap-1.5 text-sm font-medium px-2.5 sm:px-3 py-1.5 rounded-lg hover:bg-white/20 transition-colors">
+                          <CopyIcon size={15} /> <span className="hidden sm:inline">Copy</span>
+                        </button>
+                        <button onClick={bulkDelete} data-testid="bulk-delete-button" className="flex items-center gap-1.5 text-sm font-medium px-2.5 sm:px-3 py-1.5 rounded-lg bg-white/15 hover:bg-white/25 transition-colors">
+                          <Trash2 size={15} /> <span className="hidden sm:inline">Delete</span>
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {loading || searching ? (
                 <div className="py-20 text-center text-gray-400"><Loader2 size={22} className="animate-spin inline" /></div>
               ) : filtered.length === 0 ? (
@@ -511,14 +596,23 @@ export default function Files() {
                     const meta = fileMeta(item.name);
                     const Ic = item.is_dir ? Folder : meta.icon;
                     const isImg = !item.is_dir && categoryOf(item.name) === "image";
+                    const isSel = selected.has(item.path);
                     return (
                       <ItemMenu key={item.path} item={item}>
                       <div
                         data-testid={`file-card-${item.name}`}
                         onDoubleClick={() => openItem(item)}
-                        className="group relative bg-white border border-gray-200 rounded-2xl p-4 flex flex-col items-center text-center hover:shadow-md hover:border-blue-200 transition-all cursor-pointer"
+                        className={`group relative bg-white border rounded-2xl p-4 flex flex-col items-center text-center hover:shadow-md transition-all cursor-pointer ${isSel ? "border-blue-500 ring-2 ring-blue-200 bg-blue-50/40" : "border-gray-200 hover:border-blue-200"}`}
                         onClick={() => openItem(item)}
                       >
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleSelect(item); }}
+                          data-testid={`select-${item.name}`}
+                          aria-label={`Select ${item.name}`}
+                          className={`absolute top-2 left-2 h-6 w-6 flex items-center justify-center rounded-md border bg-white transition-opacity ${isSel ? "border-blue-500 text-blue-600 opacity-100" : "border-gray-300 text-transparent opacity-0 group-hover:opacity-100 hover:border-blue-400"}`}
+                        >
+                          <CheckSquare size={15} />
+                        </button>
                         {isImg ? (
                           <div className="h-14 w-14 rounded-xl overflow-hidden mb-2.5 bg-gray-50 border border-gray-100">
                             <ThumbImage storageId={active.id} item={item} fallback={<Ic size={26} className="text-sky-500" />} />
@@ -553,6 +647,16 @@ export default function Files() {
                     <table className="w-full text-sm min-w-[640px]">
                       <thead>
                         <tr className="bg-gray-50 text-left border-b border-gray-200">
+                          <th className="pl-4 pr-1 py-2.5 w-10">
+                            <button
+                              onClick={toggleSelectAll}
+                              data-testid="select-all"
+                              aria-label="Select all"
+                              className={`h-5 w-5 flex items-center justify-center rounded border bg-white transition-colors ${allSelected ? "border-blue-500 text-blue-600" : selCount > 0 ? "border-blue-500 text-blue-600" : "border-gray-300 text-transparent hover:border-blue-400"}`}
+                            >
+                              {allSelected ? <CheckSquare size={13} /> : selCount > 0 ? <Minus size={13} /> : <CheckSquare size={13} />}
+                            </button>
+                          </th>
                           <SortHeader label="Name" sortKey="name" />
                           <SortHeader label="Size" sortKey="size" className="w-32" />
                           <SortHeader label="Modified" sortKey="modified" className="w-48 hidden sm:table-cell" />
@@ -563,9 +667,20 @@ export default function Files() {
                         {filtered.map((item) => {
                           const meta = fileMeta(item.name);
                           const Ic = item.is_dir ? Folder : meta.icon;
+                          const isSel = selected.has(item.path);
                           return (
                             <ItemMenu key={item.path} item={item}>
-                            <tr className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors group cursor-pointer" data-testid={`file-row-${item.name}`} onClick={() => openItem(item)}>
+                            <tr className={`border-b border-gray-100 last:border-0 transition-colors group cursor-pointer ${isSel ? "bg-blue-50 hover:bg-blue-50" : "hover:bg-gray-50"}`} data-testid={`file-row-${item.name}`} onClick={() => openItem(item)}>
+                              <td className="pl-4 pr-1 py-2.5" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  onClick={() => toggleSelect(item)}
+                                  data-testid={`select-${item.name}`}
+                                  aria-label={`Select ${item.name}`}
+                                  className={`h-5 w-5 flex items-center justify-center rounded border bg-white transition-all ${isSel ? "border-blue-500 text-blue-600 opacity-100" : "border-gray-300 text-transparent opacity-0 group-hover:opacity-100 hover:border-blue-400"}`}
+                                >
+                                  <CheckSquare size={13} />
+                                </button>
+                              </td>
                               <td className="px-4 py-2.5">
                                 <div className={`flex items-center gap-2.5 ${item.is_dir ? "text-gray-800" : "text-gray-700"}`}>
                                   <span className={`h-8 w-8 rounded-lg flex items-center justify-center shrink-0 overflow-hidden ${item.is_dir ? "bg-blue-50 text-blue-500" : meta.box}`}>
@@ -681,6 +796,25 @@ export default function Files() {
 
       {shareItem && active && (
         <ShareDialog storageId={active.id} item={shareItem} onClose={() => setShareItem(null)} />
+      )}
+
+      {bulkMoveCopy && active && selCount > 0 && (
+        <MoveCopyDialog
+          sourceStorageId={active.id}
+          storages={storages}
+          items={selectedItems}
+          mode={bulkMoveCopy}
+          onClose={() => setBulkMoveCopy(null)}
+          onDone={() => { clearSelection(); loadFiles(path); }}
+        />
+      )}
+
+      {bulkShare && active && selectedFiles.length > 0 && (
+        <BulkShareDialog
+          storageId={active.id}
+          items={selectedFiles}
+          onClose={() => setBulkShare(false)}
+        />
       )}
 
       {renameItem && (

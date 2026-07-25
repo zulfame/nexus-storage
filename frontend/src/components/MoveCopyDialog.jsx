@@ -16,7 +16,10 @@ function typeIcon(type, size = 14) {
   return <Server size={size} />;
 }
 
-export function MoveCopyDialog({ sourceStorageId, storages = [], item, mode, onClose, onDone }) {
+export function MoveCopyDialog({ sourceStorageId, storages = [], item, items, mode, onClose, onDone }) {
+  const list = items && items.length ? items : item ? [item] : [];
+  const single = list.length === 1;
+  const label = single ? list[0].name : `${list.length} items`;
   const [destId, setDestId] = useState(sourceStorageId);
   const [path, setPath] = useState("");
   const [folders, setFolders] = useState([]);
@@ -40,33 +43,38 @@ export function MoveCopyDialog({ sourceStorageId, storages = [], item, mode, onC
   const go = (p) => { setPath(p); load(destId, p); };
 
   const crumbs = path ? path.split("/").filter(Boolean) : [];
-  const srcParent = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/")) : "";
-  const invalidTarget = !crossStorage && (
-    (item.is_dir && (path === item.path || path.startsWith(item.path + "/"))) ||
-    (isMove && path === srcParent)
-  );
+  const invalidTarget = !crossStorage && list.some((it) => {
+    const sp = it.path.includes("/") ? it.path.slice(0, it.path.lastIndexOf("/")) : "";
+    return (it.is_dir && (path === it.path || path.startsWith(it.path + "/"))) || (isMove && path === sp);
+  });
 
   const submit = async () => {
-    const dst = path ? `${path}/${item.name}` : item.name;
     setWorking(true);
-    try {
-      if (crossStorage) {
-        await api.post(`/storages/${sourceStorageId}/files/transfer`, {
-          dest_storage_id: destId, src: item.path, dst, is_dir: item.is_dir, move: isMove,
-        });
-      } else {
-        await api.post(`/storages/${sourceStorageId}/files/move`, {
-          src: item.path, dst, is_dir: item.is_dir, copy: !isMove,
-        });
+    let ok = 0;
+    const failed = [];
+    for (const it of list) {
+      const dst = path ? `${path}/${it.name}` : it.name;
+      try {
+        if (crossStorage) {
+          await api.post(`/storages/${sourceStorageId}/files/transfer`, {
+            dest_storage_id: destId, src: it.path, dst, is_dir: it.is_dir, move: isMove,
+          });
+        } else {
+          await api.post(`/storages/${sourceStorageId}/files/move`, {
+            src: it.path, dst, is_dir: it.is_dir, copy: !isMove,
+          });
+        }
+        ok++;
+      } catch {
+        failed.push(it.name);
       }
-      toast.success(`${isMove ? "Moved" : "Copied"} "${item.name}"${crossStorage ? " across storages" : ""}`);
-      onDone?.();
-      onClose();
-    } catch (e) {
-      toast.error(apiError(e, `${isMove ? "Move" : "Copy"} failed`));
-    } finally {
-      setWorking(false);
     }
+    const verb = isMove ? "Moved" : "Copied";
+    if (failed.length) toast.warning(`${verb} ${ok}, ${failed.length} failed: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? "…" : ""}`);
+    else toast.success(`${verb} ${ok} item${ok > 1 ? "s" : ""}${crossStorage ? " across storages" : ""}`);
+    setWorking(false);
+    if (ok > 0) onDone?.();
+    onClose();
   };
 
   const destStorage = storages.find((s) => s.id === destId);
@@ -80,7 +88,7 @@ export function MoveCopyDialog({ sourceStorageId, storages = [], item, mode, onC
           </span>
           <div className="flex-1 min-w-0">
             <div className="font-semibold text-sm text-gray-900">{isMove ? "Move" : "Copy"} to…</div>
-            <div className="text-xs text-gray-400 truncate">{item.name}</div>
+            <div className="text-xs text-gray-400 truncate">{label}</div>
           </div>
           <button onClick={onClose} aria-label="Close" data-testid="move-copy-close" className="h-8 w-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors">
             <X size={18} />
@@ -132,7 +140,7 @@ export function MoveCopyDialog({ sourceStorageId, storages = [], item, mode, onC
             <div className="py-12 text-center text-gray-400 text-sm">No sub-folders here.</div>
           ) : (
             folders.map((f) => {
-              const disabled = !crossStorage && item.is_dir && f.path === item.path;
+              const disabled = !crossStorage && list.some((it) => it.is_dir && f.path === it.path);
               return (
                 <button
                   key={f.path}

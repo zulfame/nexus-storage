@@ -142,6 +142,20 @@ config, README env-var table).
   2 iter16 transfer pytest cases are fixture-flaky (require a pre-existing SFTP dest folder), not
   product bugs.
 
+## Implemented (2026-06, fork: PDF preview fix + multi-select bulk actions)
+- **PDF/media preview fix**: FilePreview re-wraps the downloaded blob with the correct MIME type
+  (by extension) instead of the backend's `application/octet-stream`, so PDFs/images/video/audio
+  render inline in the iframe instead of triggering a browser download. Verified on live S3 PDF.
+- **Multi-select + bulk actions** (File Browser): checkbox on every row/card + select-all header
+  (with indeterminate state), blue selection toolbar (selection-toolbar) showing count and
+  Download / Share / Move / Copy / Delete. Selection clears on navigation/storage switch.
+  - Bulk delete/move/copy loop the existing single-item endpoints with per-item success/fail toasts.
+  - MoveCopyDialog now accepts an `items` array (works for single or many, cross-storage supported).
+  - New BulkShareDialog creates a public link per selected file (shared expiry/password) with
+    per-link + copy-all buttons.
+- Verified: self-tested via screenshot on live STAGING S3 — selection toolbar shows "1 selected"
+  with all actions; PDF preview opens inline (iframe present, no download).
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).

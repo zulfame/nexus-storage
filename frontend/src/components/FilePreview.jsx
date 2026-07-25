@@ -37,7 +37,11 @@ export function FilePreview({ storageId, item, onClose, onDownload }) {
           responseType: "blob",
         });
         if (cancelled) return;
-        const blob = res.data;
+        const ext = extOf(item.name);
+        const mime = MIME[ext];
+        // Backend serves everything as application/octet-stream, which makes
+        // browsers download instead of render. Re-wrap with the correct MIME type.
+        const blob = mime ? new Blob([res.data], { type: mime }) : res.data;
 
         if (["image", "pdf", "video", "audio"].includes(cat)) {
           objectUrl = URL.createObjectURL(blob);
