@@ -1,10 +1,9 @@
 # Nexus Storage Manager — Roadmap & Enhancements
 
-This document tracks **potential improvements**, **feature enhancements** (prioritized backlog),
-and the proposed **client-facing programmatic API** (API keys + CRUD/manage endpoints for external
-clients). Nothing here is implemented yet — it is a planning reference.
+This document tracks **potential improvements** and the **feature backlog**. Most items listed here
+have since been implemented (marked ✅); remaining open items are called out per priority.
 
-Last updated: 2026-06.
+Last updated: 2026-06 (post Client-API + backlog delivery).
 
 ---
 
@@ -17,10 +16,10 @@ These are UX/polish ideas surfaced across sessions. Small-to-medium effort, high
 | PI-1 | **Real-time connection status** (online/offline) badge on each storage card | Dashboard / List Storage | Periodic/background health check per storage so users see which NAS/bucket is reachable without clicking "Test". |
 | PI-2 | **UI consistency polish** across Dashboard, Logs Activity, Manage User, Manage App | Frontend | Bring the remaining admin pages to the same refined level as File Browser & List Storage (spacing, cards, empty states, micro-animations). |
 | PI-3 | **Multi-select + bulk actions** (move / copy / delete / share / download multiple items) | File Browser | ✅ Implemented (2026-06). Checkbox selection + select-all, blue selection toolbar, bulk delete/move/copy/share/download. |
-| PI-4 | **Drag-to-move** between folders / onto breadcrumb | File Browser | Drag a file/folder onto a breadcrumb crumb or a folder row to move it. |
-| PI-5 | **Column sort** (name / size / modified) in list view | File Browser | Sort toggles on table headers. |
-| PI-6 | **Grid image thumbnails** | File Browser | ✅ Implemented (ThumbImage, lazy-loaded, cached). Kept here as reference. |
-| PI-7 | **Toast + progress polish** | File Browser | ✅ Upload progress modal + toasts implemented. Could extend to download progress for large files. |
+| PI-4 | **Drag-to-move** between folders / onto breadcrumb | File Browser | ✅ Implemented (2026-06). Single item or whole multi-selection; drop on folder row/card or breadcrumb crumb. |
+| PI-5 | **Column sort** (name / size / modified) in list view | File Browser | ✅ Implemented. Sort toggles on table headers. |
+| PI-6 | **Grid image thumbnails** | File Browser | ✅ Implemented (ThumbImage, lazy-loaded, cached). |
+| PI-7 | **Toast + progress polish** | File Browser | ✅ Upload progress modal + toasts; ✅ Download manager panel with per-file progress + cancel (abort). |
 
 ---
 
@@ -31,34 +30,49 @@ Core product is functional and verified.
 
 ### P1 — high priority
 - **FE-1: Multi-select & bulk file operations** (move/copy/delete/share/download many). ✅ Implemented (2026-06).
-- **FE-2: Storage config validation** — enforce required fields per type on create/update; return
-  `404` for unknown/malformed storage ids (currently generic errors).
-- **FE-3: SFTP private-key auth** — allow SSH key (and passphrase) in addition to password.
-- **FE-4: Client-facing programmatic API** — see Section 3 (API keys + CRUD/manage endpoints).
+- **FE-2: Storage config validation** — required fields per type on create/update + `404` for
+  unknown/malformed storage ids. ✅ Implemented (2026-06).
+- **FE-3: SFTP private-key auth** — SSH key (Ed25519/RSA/ECDSA) + passphrase in addition to password.
+  ✅ Implemented (2026-06); verified against a real SSH server.
+- **FE-4: Client-facing programmatic API** — API keys + versioned `/api/v1` CRUD. ✅ Implemented
+  (2026-06). See Section 3 for the delivered routes.
 
-### P2 — medium priority
-- **FE-5: Cross-storage move/copy** — move/copy files between two different storages (stream via backend).
-- **FE-6: Storage usage metrics** — per-storage used/total, object counts, dashboard charts.
-- **FE-7: Dedicated `STORAGE_ENCRYPTION_KEY`** env (decouple secret encryption from `JWT_SECRET`).
-- **FE-8: Log aggregation** — single Mongo aggregation for log counts; native BSON date timestamps.
-- **FE-9: Folder upload** (directory upload / preserve structure) and **resumable/chunked** uploads
-  for very large files.
-- **FE-10: Shareable links** — time-limited, optionally password-protected download links.
-- **FE-11: Search across a whole storage** (recursive), not just current folder.
-- **FE-12: File versioning / trash** — soft-delete with restore where the backend supports it.
+### P2 — medium priority (all delivered)
+- **FE-5: Cross-storage move/copy** ✅  · **FE-6: Storage usage metrics** ✅ (Used/Total capacity meter)
+  · **FE-7: Dedicated `STORAGE_ENCRYPTION_KEY`** ✅ · **FE-8: Log aggregation** ✅
+  · **FE-9: Folder/chunked upload** ✅ (chunked) · **FE-10: Shareable links** ✅ (+ OG unfurl page)
+  · **FE-11: Recursive search** ✅.
 
-### P3 — nice to have
+### P3 — nice to have (open)
+- **FE-12: File versioning / trash** (soft-delete + restore where supported).
 - **FE-13: 2FA / TOTP** for admin accounts.
 - **FE-14: Webhooks** on file events (uploaded/deleted/moved).
 - **FE-15: Themes** (light/dark toggle) and per-user preferences.
+- **FE-16: True SSR/prerender OG** for the app root/landing (share links already unfurl via
+  `/api/share/{token}/og`).
+- **FE-17: Client SDK snippets** (copy-paste Python/JS) in the API Documentation card.
 
 ---
 
-## 3. Client-facing Programmatic API (proposed)
+## 3. Client-facing Programmatic API — ✅ DELIVERED (2026-06)
 
-Goal: let **external clients / applications** integrate with Nexus programmatically (machine-to-machine),
-in addition to the interactive web UI. Two building blocks: **API key management** and a stable,
-versioned **CRUD + manage API**.
+Implemented so external clients can integrate programmatically. **Note:** the delivered routes differ
+slightly from the original proposal below — the actual, current contract is:
+
+- **Admin key management** lives under `/api/api-keys` (JWT admin), UI at **Manage APIs** (`/manage-apis`).
+- **Client API** is versioned under **`/api/v1`** and auth'd via `Authorization: Bearer <key>` **or**
+  `X-API-Key: <key>`. Keys are `sk_live_…`, SHA-256 hashed at rest, shown once, scoped per-storage
+  (read/write), revocable, with `request_count` + `last_used_at`. Every call is audit-logged
+  (`[API] <name>`, category `api`).
+- **Delivered client endpoints:** `GET /api/v1/ping`, `GET /api/v1/storages`,
+  `GET /api/v1/storages/{id}/files`, `GET /api/v1/storages/{id}/download`,
+  `POST /api/v1/storages/{id}/upload`, `POST /api/v1/storages/{id}/folder`,
+  `DELETE /api/v1/storages/{id}/files`.
+- **Not yet built (future):** storage/user CRUD via `/api/v1`, `move/copy` via `/api/v1`, key rotation,
+  rate limiting, and a published OpenAPI spec. In-app docs (accordion + samples) already ship on the
+  Manage APIs page.
+
+The original design sketch (kept for reference) follows.
 
 ### 3.1 Design principles
 - **Versioned** under `/api/v1/...` so the UI's internal routes and the public client API can evolve
@@ -132,7 +146,12 @@ Data model (proposed):
 ---
 
 ## 4. Implemented milestones (summary)
-See `PRD.md` (and `CHANGELOG` sections within it) for the full, dated implementation history:
-JWT auth, storage CRUD + test (S3/Samba/SFTP), per-storage access, file browser (list/grid,
-preview for images/pdf/docx/xlsx/csv/text/media), upload progress + drag-drop, rename/move/copy,
-right-click context menu, thumbnails, activity logs, manage-app branding.
+See `PRD.md` for the full, dated implementation history. Highlights: JWT auth; storage CRUD + test
+(S3/Samba/**SFTP incl. private-key**) with config validation + `404`s; per-storage access; File
+Browser (storage-picker landing, list/grid, sortable columns, preview for
+images/pdf/docx/xlsx/csv/text/media, upload progress + drag-drop, **download manager + cancel**,
+rename/move/copy, **cross-storage transfer**, **multi-select bulk actions**, **drag-to-move**,
+context menu, thumbnails, recursive search); per-storage **capacity meter**; **shareable links + OG
+unfurl page**; **Manage APIs** (API keys + `/api/v1` client API with in-app docs, all calls logged);
+Dashboard + Logs for users (scoped); app branding with **app-wide primary color** + **OG/meta
+injection**; activity logs (All/File/**API**/Connections).
