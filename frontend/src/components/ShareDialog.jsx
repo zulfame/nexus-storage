@@ -25,7 +25,7 @@ export function ShareDialog({ storageId, item, onClose }) {
         expires_days: days,
         password: password || null,
       });
-      setLink(`${window.location.origin}/share/${r.data.token}`);
+      setLink(`${window.location.origin}/api/share/${r.data.token}/og`);
       toast.success("Share link created");
     } catch (e) {
       toast.error(apiError(e, "Failed to create link"));

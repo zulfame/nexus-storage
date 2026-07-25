@@ -17,7 +17,8 @@ import bcrypt
 import jwt
 from bson import ObjectId
 from fastapi import FastAPI, APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Query, Header, Security
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
+import html as html_lib
 from fastapi.security import HTTPBearer
 from starlette.concurrency import run_in_threadpool
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -977,6 +978,63 @@ async def share_info(token: str):
         "expires_at": doc.get("expires_at"),
         "downloads": doc.get("downloads", 0),
     }
+
+
+def _human_size(n):
+    if not n:
+        return ""
+    units = ["B", "KB", "MB", "GB", "TB"]
+    i = 0
+    v = float(n)
+    while v >= 1024 and i < len(units) - 1:
+        v /= 1024
+        i += 1
+    return f"{v:.1f} {units[i]}" if i > 0 and v < 10 else f"{int(v)} {units[i]}"
+
+
+@api_router.get("/share/{token}/og", response_class=HTMLResponse)
+async def share_og(token: str, request: Request):
+    doc = await db.shares.find_one({"token": token})
+    settings = await get_settings()
+    app_name = settings.get("app_name") or "Nexus Storage Manager"
+    image = settings.get("favicon_url") or settings.get("logo_url") or ""
+    proto = request.headers.get("x-forwarded-proto", "https")
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+    origin = f"{proto}://{host}" if host else str(request.base_url).rstrip("/")
+    origin = origin.rstrip("/")
+    redirect = f"{origin}/share/{token}"
+    if not doc or _share_expired(doc):
+        title = "Link unavailable"
+        desc = "This shared link is invalid or has expired."
+    else:
+        fname = doc.get("name") or "Shared file"
+        size_txt = _human_size(doc.get("size"))
+        title = f"{fname} · {app_name}"
+        desc = f"Shared file{(' (' + size_txt + ')') if size_txt else ''} via {app_name}. Click to download."
+
+    def esc(x):
+        return html_lib.escape(str(x or ""), quote=True)
+
+    img_tags = ""
+    if image:
+        img_tags = f'<meta property="og:image" content="{esc(image)}"/><meta name="twitter:image" content="{esc(image)}"/>'
+    page = f"""<!doctype html><html lang="en"><head>
+<meta charset="utf-8"/>
+<title>{esc(title)}</title>
+<meta name="description" content="{esc(desc)}"/>
+<meta property="og:type" content="website"/>
+<meta property="og:site_name" content="{esc(app_name)}"/>
+<meta property="og:title" content="{esc(title)}"/>
+<meta property="og:description" content="{esc(desc)}"/>
+<meta property="og:url" content="{esc(redirect)}"/>
+{img_tags}
+<meta name="twitter:card" content="{'summary_large_image' if image else 'summary'}"/>
+<meta name="twitter:title" content="{esc(title)}"/>
+<meta name="twitter:description" content="{esc(desc)}"/>
+<meta http-equiv="refresh" content="0; url={esc(redirect)}"/>
+<script>window.location.replace({redirect!r});</script>
+</head><body style="font-family:sans-serif;padding:2rem;color:#334155">Redirecting to <a href="{esc(redirect)}">{esc(title)}</a>…</body></html>"""
+    return HTMLResponse(content=page)
 
 
 @api_router.get("/share/{token}/download")

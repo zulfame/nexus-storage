@@ -29,7 +29,7 @@ export function BulkShareDialog({ storageId, items = [], onClose }) {
           expires_days: days,
           password: password || null,
         });
-        out.push({ name: it.name, link: `${window.location.origin}/share/${r.data.token}` });
+        out.push({ name: it.name, link: `${window.location.origin}/api/share/${r.data.token}/og` });
       } catch {
         failed.push(it.name);
       }

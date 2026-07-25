@@ -239,6 +239,25 @@ config, README env-var table).
   Manage APIs UI, accordion docs, primary-color override (green test then restored), and OG meta
   presence via screenshots. (testing_agent timed out; validated manually instead.)
 
+## Implemented (2026-06, fork: backlog — OG unfurl for shares, DnD multi-select, SFTP key test)
+- **Server-side OG for share links (real unfurl)**: new public `GET /api/share/{token}/og` returns an
+  HTML page with full Open Graph / Twitter meta (title = filename · app_name, description with size,
+  og:image from favicon/logo) + instant redirect to `/share/{token}`. Public origin derived from
+  `X-Forwarded-Host/Proto`. ShareDialog & BulkShareDialog now hand out the `/api/share/{token}/og`
+  link so WhatsApp/Telegram/etc. unfurl a proper preview card. (App-root unfurl still needs true SSR.)
+- **Drag-to-move multi-select**: if the dragged item is part of the current multi-selection, dropping it
+  on a folder/breadcrumb moves ALL selected items (moveItemsTo); otherwise just the dragged one.
+  Guards folder-into-itself and same-parent per item.
+- **SFTP private-key auth verified end-to-end** against a real local OpenSSH server (ed25519 key):
+  test-connection success, create, list root/subdir, encrypted private_key round-trip, delete. Code path
+  in storage_backends.SFTPBackend._load_pkey/_connect confirmed working.
+- Verified via screenshots: Manage APIs full UI lifecycle (create→reveal sk_live_→revoke→delete),
+  accordion docs; role=user nav shows only Dashboard/File Browser/Logs; user Dashboard hides
+  Users/Team; user Logs scoped to their storage + "API Calls" tab/stat present. Backend all via curl.
+  NOTE: creating an SFTP storage with a pasted private key via the PUBLIC URL can be blocked by the
+  platform WAF (Cloudflare 1010) due to the key payload; the app itself handles it fine (verified locally).
+- testing_agent timed out twice (infra), so this batch was validated manually (curl + screenshots).
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).

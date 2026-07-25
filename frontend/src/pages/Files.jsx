@@ -242,20 +242,30 @@ export default function Files() {
     if (dragOverPath !== targetPath) setDragOverPath(targetPath);
   };
 
-  const moveItemTo = async (item, destPath) => {
-    const srcParent = item.path.includes("/") ? item.path.slice(0, item.path.lastIndexOf("/")) : "";
-    if (destPath === srcParent) return; // already there
-    if (item.is_dir && (destPath === item.path || destPath.startsWith(item.path + "/"))) {
-      return toast.error("Can't move a folder into itself");
+  const moveItemsTo = async (items, destPath) => {
+    const valid = items.filter((it) => {
+      const sp = it.path.includes("/") ? it.path.slice(0, it.path.lastIndexOf("/")) : "";
+      if (destPath === sp) return false; // already there
+      if (it.is_dir && (destPath === it.path || destPath.startsWith(it.path + "/"))) return false; // into itself
+      return true;
+    });
+    if (!valid.length) return;
+    let ok = 0;
+    const failed = [];
+    for (const it of valid) {
+      const dst = destPath ? `${destPath}/${it.name}` : it.name;
+      try {
+        await api.post(`/storages/${active.id}/files/move`, { src: it.path, dst, is_dir: it.is_dir, copy: false });
+        ok++;
+      } catch {
+        failed.push(it.name);
+      }
     }
-    const dst = destPath ? `${destPath}/${item.name}` : item.name;
-    try {
-      await api.post(`/storages/${active.id}/files/move`, { src: item.path, dst, is_dir: item.is_dir, copy: false });
-      toast.success(`Moved "${item.name}"${destPath ? ` to ${destPath.split("/").pop()}` : " to root"}`);
-      loadFiles(path);
-    } catch (e) {
-      toast.error(apiError(e, "Move failed"));
-    }
+    const where = destPath ? `to ${destPath.split("/").pop()}` : "to root";
+    if (failed.length) toast.warning(`Moved ${ok}, ${failed.length} failed ${where}`);
+    else if (ok) toast.success(`Moved ${ok} item${ok > 1 ? "s" : ""} ${where}`);
+    clearSelection();
+    loadFiles(path);
   };
 
   const folderDrop = (e, targetPath, targetItem) => {
@@ -264,8 +274,9 @@ export default function Files() {
     e.stopPropagation();
     const it = dragItem;
     endItemDrag();
-    if (targetItem && it.path === targetItem.path) return;
-    moveItemTo(it, targetPath);
+    const batch = selected.has(it.path) && selCount > 1 ? selectedItems : [it];
+    const items = targetItem ? batch.filter((b) => b.path !== targetItem.path) : batch;
+    moveItemsTo(items, targetPath);
   };
 
   const dismissDownload = (id) =>
