@@ -6,6 +6,8 @@ import { UploadDialog } from "@/components/UploadDialog";
 import { MoveCopyDialog } from "@/components/MoveCopyDialog";
 import { ShareDialog } from "@/components/ShareDialog";
 import { BulkShareDialog } from "@/components/BulkShareDialog";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { DownloadManager } from "@/components/DownloadManager";
 import { ThumbImage } from "@/components/ThumbImage";
 import { fileMeta, isPreviewable, categoryOf } from "@/lib/fileTypes";
 import { toast } from "sonner";
@@ -108,6 +110,8 @@ export default function Files() {
   const [selected, setSelected] = useState(() => new Set());
   const [bulkMoveCopy, setBulkMoveCopy] = useState(null); // "move" | "copy"
   const [bulkShare, setBulkShare] = useState(false);
+  const [confirm, setConfirm] = useState(null); // { title, message, confirmLabel, onConfirm }
+  const [downloads, setDownloads] = useState([]);
   const reqId = useRef(0);
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
@@ -203,29 +207,53 @@ export default function Files() {
     if (fs.length) openUpload(fs);
   };
 
+  const dismissDownload = (id) => setDownloads((d) => d.filter((x) => x.id !== id));
+
   const download = async (item) => {
+    const id = `${item.path}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setDownloads((d) => [
+      ...d,
+      { id, name: item.name, loaded: 0, total: item.size || 0, status: "downloading" },
+    ]);
     try {
-      const res = await api.get(`/storages/${active.id}/files/download`, { params: { path: item.path }, responseType: "blob" });
+      const res = await api.get(`/storages/${active.id}/files/download`, {
+        params: { path: item.path },
+        responseType: "blob",
+        onDownloadProgress: (e) => {
+          const total = e.total || item.size || 0;
+          setDownloads((d) => d.map((x) => (x.id === id ? { ...x, loaded: e.loaded, total } : x)));
+        },
+      });
       const url = URL.createObjectURL(res.data);
       const a = document.createElement("a");
       a.href = url;
       a.download = item.name;
       a.click();
       URL.revokeObjectURL(url);
+      setDownloads((d) => d.map((x) => (x.id === id ? { ...x, status: "done", loaded: x.total || x.loaded } : x)));
+      setTimeout(() => dismissDownload(id), 3000);
     } catch (e) {
       toast.error(apiError(e, "Download failed"));
+      setDownloads((d) => d.map((x) => (x.id === id ? { ...x, status: "error" } : x)));
+      setTimeout(() => dismissDownload(id), 5000);
     }
   };
 
-  const remove = async (item) => {
-    if (!window.confirm(`Delete ${item.is_dir ? "folder" : "file"} "${item.name}"?`)) return;
-    try {
-      await api.delete(`/storages/${active.id}/files`, { params: { path: item.path, is_dir: item.is_dir } });
-      toast.success("Deleted");
-      loadFiles(path);
-    } catch (e) {
-      toast.error(apiError(e, "Delete failed"));
-    }
+  const remove = (item) => {
+    setConfirm({
+      title: `Delete ${item.is_dir ? "folder" : "file"}?`,
+      message: `"${item.name}" will be permanently deleted. This action cannot be undone.`,
+      confirmLabel: "Delete",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/storages/${active.id}/files`, { params: { path: item.path, is_dir: item.is_dir } });
+          toast.success("Deleted");
+          loadFiles(path);
+        } catch (e) {
+          toast.error(apiError(e, "Delete failed"));
+        }
+      },
+    });
   };
 
   const createFolder = async () => {
@@ -302,23 +330,29 @@ export default function Files() {
   const toggleSelectAll = () =>
     setSelected(allSelected ? new Set() : new Set(filtered.map((i) => i.path)));
 
-  const bulkDelete = async () => {
+  const bulkDelete = () => {
     if (!selCount) return;
-    if (!window.confirm(`Delete ${selCount} selected item${selCount > 1 ? "s" : ""}?`)) return;
-    let ok = 0;
-    const failed = [];
-    for (const it of selectedItems) {
-      try {
-        await api.delete(`/storages/${active.id}/files`, { params: { path: it.path, is_dir: it.is_dir } });
-        ok++;
-      } catch {
-        failed.push(it.name);
-      }
-    }
-    if (failed.length) toast.warning(`Deleted ${ok}, ${failed.length} failed: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? "…" : ""}`);
-    else toast.success(`Deleted ${ok} item${ok > 1 ? "s" : ""}`);
-    clearSelection();
-    loadFiles(path);
+    setConfirm({
+      title: `Delete ${selCount} item${selCount > 1 ? "s" : ""}?`,
+      message: `The selected item${selCount > 1 ? "s" : ""} will be permanently deleted. This action cannot be undone.`,
+      confirmLabel: `Delete ${selCount}`,
+      onConfirm: async () => {
+        let ok = 0;
+        const failed = [];
+        for (const it of selectedItems) {
+          try {
+            await api.delete(`/storages/${active.id}/files`, { params: { path: it.path, is_dir: it.is_dir } });
+            ok++;
+          } catch {
+            failed.push(it.name);
+          }
+        }
+        if (failed.length) toast.warning(`Deleted ${ok}, ${failed.length} failed: ${failed.slice(0, 3).join(", ")}${failed.length > 3 ? "…" : ""}`);
+        else toast.success(`Deleted ${ok} item${ok > 1 ? "s" : ""}`);
+        clearSelection();
+        loadFiles(path);
+      },
+    });
   };
 
   const bulkDownload = () => {
@@ -816,6 +850,19 @@ export default function Files() {
           onClose={() => setBulkShare(false)}
         />
       )}
+
+      {confirm && (
+        <ConfirmDialog
+          title={confirm.title}
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          danger
+          onConfirm={confirm.onConfirm}
+          onClose={() => setConfirm(null)}
+        />
+      )}
+
+      <DownloadManager downloads={downloads} onDismiss={dismissDownload} />
 
       {renameItem && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-gray-900/50 backdrop-blur-sm p-4 animate-in fade-in duration-150" onClick={() => setRenameItem(null)}>

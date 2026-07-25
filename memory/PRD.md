@@ -156,6 +156,18 @@ config, README env-var table).
 - Verified: self-tested via screenshot on live STAGING S3 — selection toolbar shows "1 selected"
   with all actions; PDF preview opens inline (iframe present, no download).
 
+## Implemented (2026-06, fork: delete confirm modal + download progress)
+- **ConfirmDialog** (components/ConfirmDialog.jsx): reusable polished confirmation modal (danger
+  variant with red trash icon, title, message, Cancel/Delete). Replaces native window.confirm for
+  single-file delete (remove) and bulk delete. Handles its own async working/spinner state.
+- **DownloadManager** (components/DownloadManager.jsx): floating bottom-right panel listing active
+  downloads with per-file progress bar + % (spinner → check/error). `download()` in Files.jsx now
+  tracks axios onDownloadProgress; entries auto-dismiss 3s after done / 5s after error.
+- **Backend**: download endpoint now sets `Content-Length` (from storage size) so progress is
+  determinate; frontend also falls back to `item.size` for the total.
+- Verified: self-tested via screenshot on live STAGING S3 — delete confirm modal renders correctly;
+  download panel shows "Downloading 1 file" with progress bar/% (throttled to confirm progress UI).
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).

@@ -564,6 +564,8 @@ async def download_file(storage_id: str, path: str, user: dict = Depends(get_cur
         raise HTTPException(status_code=400, detail=f"Download failed: {humanize_storage_error(e)}")
     filename = path.rstrip("/").split("/")[-1]
     headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    if size and size > 0:
+        headers["Content-Length"] = str(size)
     return StreamingResponse(stream, media_type="application/octet-stream", headers=headers)
 
 
