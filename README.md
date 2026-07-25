@@ -64,7 +64,8 @@ frontend/   React app (all API calls use REACT_APP_BACKEND_URL + /api)
 | JWT_SECRET | Required | (auto by panel) | JWT signing key; also derives the credential encryption key |
 | ADMIN_EMAIL | Optional | admin@example.com | Initial admin email. Seeded only on a fresh (empty) database. Not needed once any user exists. |
 | ADMIN_PASSWORD | Optional | admin123 | Initial admin password. Seeded only on a fresh (empty) database. Not needed once any user exists. |
-| LOCAL_STORAGE_DIR | Optional | /app/data | Persistent files/scratch folder (mounted volume) |
+| STORAGE_ENCRYPTION_KEY | Optional | (falls back to JWT_SECRET) | Dedicated secret used to encrypt storage credentials at rest. If unset, the JWT_SECRET-derived key is used. Existing credentials keep decrypting via a fallback. |
+| LOCAL_STORAGE_DIR | Optional | /app/data | Persistent files/scratch folder (also holds chunked-upload temp files) |
 | ACCESS_TOKEN_MINUTES | Optional | 1440 | JWT access token lifetime in minutes |
 
 All variables are read via `os.environ.get(...)`. Only the ones marked **Required** without a
@@ -119,7 +120,10 @@ Roles: **any** = any authenticated user, **admin** = admin only.
 | Method | Path | Role | Description |
 |--------|------|------|-------------|
 | GET | `/api/storages/{id}/files?path=` | read | List folder contents |
-| POST | `/api/storages/{id}/files/upload` | write | Multipart upload (`path`, `file`) |
+| GET | `/api/storages/{id}/files/search?q=&path=` | read | Recursive search across the storage subtree (capped) |
+| POST | `/api/storages/{id}/files/upload` | write | Multipart upload (`path`, `file`; auto-creates parent folders) |
+| POST | `/api/storages/{id}/files/chunk` | write | Upload one chunk (`upload_id`, `index`, `chunk`) — large files |
+| POST | `/api/storages/{id}/files/chunk/complete` | write | Assemble chunks → write file `{upload_id,path,filename}` |
 | GET | `/api/storages/{id}/files/download?path=` | read | Download a file (stream) |
 | DELETE | `/api/storages/{id}/files?path=&is_dir=` | write | Delete file/folder |
 | POST | `/api/storages/{id}/files/folder` | write | Create folder `{path,name}` |

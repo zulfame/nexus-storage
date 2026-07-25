@@ -170,6 +170,13 @@ async def _log_reconnect(user, backend, sdoc, path=""):
         await log_activity(user, "reconnect", sdoc, path, "Connection dropped and was re-established automatically")
 
 
+async def _invalidate_usage(storage_id):
+    try:
+        await db.storages.update_one({"_id": ObjectId(storage_id)}, {"$unset": {"usage": ""}})
+    except Exception:
+        pass
+
+
 def user_permission_for(user: dict, storage_id: str) -> Optional[str]:
     if user.get("role") == "admin":
         return "write"
@@ -538,6 +545,7 @@ async def upload_file(
             return backend.upload(path, file.file, file.filename)
         key = await run_in_threadpool(do_upload)
         await log_activity(user, "upload", sdoc, key)
+        await _invalidate_usage(storage_id)
         await _log_reconnect(user, backend, sdoc, key)
         return {"status": "uploaded", "path": key}
     except HTTPException:
@@ -567,6 +575,7 @@ async def delete_file(
     try:
         await run_in_threadpool(backend.delete, path, is_dir)
         await log_activity(user, "delete_folder" if is_dir else "delete", sdoc, path)
+        await _invalidate_usage(storage_id)
         await _log_reconnect(user, backend, sdoc, path)
         return {"status": "deleted"}
     except HTTPException:
@@ -582,6 +591,7 @@ async def create_folder(storage_id: str, body: FolderBody, user: dict = Depends(
         await run_in_threadpool(backend.mkdir, body.path, body.name)
         target = f"{body.path.rstrip('/')}/{body.name}" if body.path else body.name
         await log_activity(user, "create_folder", sdoc, target)
+        await _invalidate_usage(storage_id)
         await _log_reconnect(user, backend, sdoc, target)
         return {"status": "created"}
     except HTTPException:
@@ -609,6 +619,7 @@ async def move_file(storage_id: str, body: MoveBody, user: dict = Depends(get_cu
             await run_in_threadpool(backend.move, src, dst, body.is_dir)
             await log_activity(user, "move", sdoc, dst, f"Moved from {src}")
         await _log_reconnect(user, backend, sdoc, dst)
+        await _invalidate_usage(storage_id)
         return {"status": "ok", "path": dst}
     except HTTPException:
         raise
@@ -716,6 +727,7 @@ async def upload_chunk_complete(storage_id: str, body: ChunkCompleteBody, user: 
         key = await run_in_threadpool(finalize)
         await log_activity(user, "upload", sdoc, key)
         await _log_reconnect(user, backend, sdoc, key)
+        await _invalidate_usage(storage_id)
         return {"status": "uploaded", "path": key}
     except HTTPException:
         raise
@@ -801,6 +813,9 @@ async def transfer_file(storage_id: str, body: TransferBody, user: dict = Depend
         action = "transfer"
         detail = f"{'Moved' if body.move else 'Copied'} from {src_doc.get('name')}:{src} to {dst_doc.get('name')}:{dst}"
         await log_activity(user, action, dst_doc, dst, detail)
+        await _invalidate_usage(body.dest_storage_id)
+        if body.move:
+            await _invalidate_usage(storage_id)
         return {"status": "ok", "path": dst, "storage_id": body.dest_storage_id}
     except HTTPException:
         raise

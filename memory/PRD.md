@@ -128,6 +128,20 @@ config, README env-var table).
   `/share/:token` (no auth; uses plain axios so wrong password never redirects to login).
 - Verified: iteration 16 (both) 100%, backend pytest suite tests/test_new_features.py (9 tests pass).
 
+## Implemented (2026-06, fork: P2 remainder)
+- **STORAGE_ENCRYPTION_KEY** (optional env): dedicated Fernet key for storage credentials; falls
+  back to JWT-derived key and MultiFernet decrypts legacy secrets. Backward compatible.
+- **Folder upload + chunked upload**: UploadDialog handles webkitdirectory folder uploads
+  (preserving subpaths) and auto-chunks files >8MB (5MB chunks) via /files/chunk + /chunk/complete
+  to bypass proxy limits; simple upload auto-creates parent folders (_ensure_dir).
+- **Recursive search**: GET /storages/{id}/files/search?q=&path= (capped 500 results / 8000 visits);
+  Files page adds a "This folder / Everywhere" scope toggle (debounced).
+- **Usage auto-invalidation**: cached usage cleared on upload/delete/folder/move/copy/transfer so
+  the next view recomputes.
+- Verified: iteration 17 (both) 100% frontend + backend pytest (encryption/search/chunk). NOTE:
+  2 iter16 transfer pytest cases are fixture-flaky (require a pre-existing SFTP dest folder), not
+  product bugs.
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).
