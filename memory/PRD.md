@@ -108,6 +108,13 @@ config, README env-var table).
   8MB cap) hitting the download endpoint.
 - Verified: iteration 14 (both) 100% frontend + backend curl-verified move/copy/rename on SFTP.
 
+## Implemented (2026-06, fork: Modified column + sorting)
+- List view: new **Modified** date/time column between Size and Actions (fmtDate; hidden on mobile).
+- **Sortable columns**: clickable Name/Size/Modified headers (sort-<key>) toggle asc/desc with arrow
+  indicator; folders always grouped on top. Grid view gets a Sort dropdown (grid-sort-button).
+- Login hero copy/chips updated to mention SFTP.
+- Verified: iteration 15 (frontend) 100%.
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).
