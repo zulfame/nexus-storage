@@ -9,6 +9,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Cloud, Server, HardDrive, Plus, Trash2, Pencil, Plug, Loader2, Rocket, KeyRound, FolderOpen, Eye, EyeOff, X, RefreshCw } from "lucide-react";
+import { StorageMeter } from "@/components/StorageMeter";
 
 function fmtBytes(n) {
   if (!n) return "0 B";
@@ -34,6 +35,7 @@ const empty = {
     password: "",
     domain: "",
     base_path: "",
+    capacity_gb: "",
   },
 };
 
@@ -140,6 +142,7 @@ export default function Storages() {
 
   const payload = () => {
     const c = form.config;
+    const cap = c.capacity_gb === "" || c.capacity_gb == null ? null : Number(c.capacity_gb);
     let config;
     if (form.type === "s3") {
       config = { region: c.region, endpoint: c.endpoint, bucket: c.bucket, access_key: c.access_key, secret_key: c.secret_key };
@@ -148,6 +151,7 @@ export default function Storages() {
     } else {
       config = { host: c.host, share: c.share, port: c.port, username: c.username, password: c.password, domain: c.domain };
     }
+    config.capacity_gb = cap;
     return { name: form.name, type: form.type, config };
   };
 
@@ -239,24 +243,14 @@ export default function Storages() {
                     </>
                   )}
                 </div>
-                <div className="flex items-center justify-between gap-2 mb-4 bg-blue-50/50 border border-blue-100 rounded-xl px-3 py-2" data-testid={`usage-${s.id}`}>
-                  {s.usage ? (
-                    <div className="text-xs text-gray-600">
-                      <span className="font-semibold text-gray-900">{fmtBytes(s.usage.total_size)}</span>
-                      <span className="text-gray-400"> · {s.usage.file_count} files · {s.usage.folder_count} folders</span>
-                    </div>
-                  ) : (
-                    <div className="text-xs text-gray-400">Usage not calculated</div>
-                  )}
-                  <button
-                    onClick={() => calcUsage(s)}
-                    disabled={calcId === s.id}
-                    data-testid={`calc-usage-${s.id}`}
-                    className="shrink-0 flex items-center gap-1 text-xs font-medium text-blue-600 hover:text-blue-700 disabled:opacity-60"
-                  >
-                    {calcId === s.id ? <Loader2 size={13} className="animate-spin" /> : <RefreshCw size={13} />}
-                    {s.usage ? "Refresh" : "Calculate"}
-                  </button>
+                <div className="mb-4">
+                  <StorageMeter
+                    usage={s.usage}
+                    capacityGb={s.config.capacity_gb}
+                    onRefresh={() => calcUsage(s)}
+                    refreshing={calcId === s.id}
+                    testid={`usage-${s.id}`}
+                  />
                 </div>
                 <div className="flex items-center gap-2">
                   <button
@@ -340,6 +334,8 @@ export default function Storages() {
               </div>
 
               <Field label="Display name" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} placeholder="e.g. Production NAS" testid="storage-name-input" />
+
+              <Field label="Capacity / quota in GB (optional)" value={form.config.capacity_gb} onChange={(v) => setCfg("capacity_gb", v.replace(/[^0-9.]/g, ""))} placeholder="e.g. 300 — used to show a Used / Total meter" testid="storage-capacity-input" />
 
               <div className="pt-1">
                 <div className="flex items-center gap-2 mb-3">

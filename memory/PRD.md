@@ -182,6 +182,21 @@ config, README env-var table).
   full-width with working back button; a temp read-only user correctly sees 1 colored card + 1
   grayed/disabled NO-ACCESS card (temp user cleaned up afterward).
 
+## Implemented (2026-06, fork: picker cards + capacity meter)
+- **File Browser picker cards** now mirror the List Storage card design (icon + name + type + perm
+  badge, bucket/endpoint or host/share info box, usage meter) with a single primary
+  **"Open File Browser"** button (open-storage-{id}). Inaccessible storages stay grayed with a
+  disabled "No access" button.
+- **Capacity meter replaces file/folder counts**: new optional **Capacity / quota (GB)** field per
+  storage (stored in config.capacity_gb). Shared `StorageMeter` component shows a Used / Total bar
+  (e.g. "3.3 MB / 300 GB · 0%", color turns amber ≥70% / red ≥90%). If no capacity set → shows
+  "X used" or "Usage not calculated". "Used" is still computed on demand via Refresh/Calculate
+  (cached in doc; auto-invalidated on writes) so the heavy recursive scan only runs when clicked.
+  Used on both List Storage cards and File Browser picker cards.
+- Verified: self-tested on live S3 — capacity 300GB set on STAGING via edit form (field prefills),
+  picker shows "Open File Browser" + meter "3.3 MB / 300 GB", PRODUCTION (no capacity) shows
+  "Usage not calculated / Calculate".
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).

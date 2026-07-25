@@ -9,6 +9,7 @@ import { BulkShareDialog } from "@/components/BulkShareDialog";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { DownloadManager } from "@/components/DownloadManager";
 import { PageHeader } from "@/components/PageHeader";
+import { StorageMeter } from "@/components/StorageMeter";
 import { ThumbImage } from "@/components/ThumbImage";
 import { fileMeta, isPreviewable, categoryOf } from "@/lib/fileTypes";
 import { toast } from "sonner";
@@ -116,7 +117,20 @@ export default function Files() {
   const [bulkShare, setBulkShare] = useState(false);
   const [confirm, setConfirm] = useState(null); // { title, message, confirmLabel, onConfirm }
   const [downloads, setDownloads] = useState([]);
+  const [calcId, setCalcId] = useState(null);
   const reqId = useRef(0);
+
+  const calcUsage = async (s) => {
+    setCalcId(s.id);
+    try {
+      const r = await api.get(`/storages/${s.id}/usage`, { params: { refresh: true } });
+      setStorages((list) => list.map((x) => (x.id === s.id ? { ...x, usage: r.data } : x)));
+    } catch (e) {
+      toast.error(apiError(e, "Usage scan failed"));
+    } finally {
+      setCalcId(null);
+    }
+  };
 
   const clearSelection = useCallback(() => setSelected(new Set()), []);
   const toggleSelect = (item) =>
@@ -422,32 +436,34 @@ export default function Files() {
             ) : (
               <>
                 <p className="text-sm text-gray-500 mb-6">Select a storage to browse and manage its files.</p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5" data-testid="storage-picker">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5" data-testid="storage-picker">
                   {storages.map((s) => {
                     const accessible = !!s.permission;
                     const M = storageMeta(s.type);
                     const Ic = M.icon;
                     return (
-                      <button
+                      <div
                         key={s.id}
-                        type="button"
-                        disabled={!accessible}
-                        onClick={() => accessible && setActive(s)}
                         data-testid={`storage-card-${s.id}`}
-                        aria-disabled={!accessible}
-                        className={`group relative text-left rounded-2xl p-5 border transition-all duration-200 ${
+                        className={`group relative rounded-2xl p-5 border transition-all duration-200 flex flex-col ${
                           accessible
-                            ? "bg-white border-gray-200 shadow-sm hover:shadow-lg hover:border-blue-200 hover:-translate-y-0.5 cursor-pointer"
-                            : "bg-gray-50 border-gray-200 cursor-not-allowed"
+                            ? "bg-white border-gray-200 shadow-sm hover:shadow-lg hover:border-blue-200"
+                            : "bg-gray-50 border-gray-200"
                         }`}
                       >
                         <div className="flex items-start justify-between mb-4">
-                          <div className={`h-12 w-12 flex items-center justify-center rounded-xl shrink-0 transition-transform ${accessible ? `${M.box} group-hover:scale-105` : "bg-gray-200 text-gray-400"}`}>
-                            <Ic size={24} />
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={`h-11 w-11 flex items-center justify-center rounded-xl shrink-0 ${accessible ? M.box : "bg-gray-200 text-gray-400"}`}>
+                              <Ic size={22} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className={`font-semibold text-sm truncate ${accessible ? "text-gray-900" : "text-gray-500"}`}>{s.name}</div>
+                              <div className="overline mt-0.5">{s.type}</div>
+                            </div>
                           </div>
                           {accessible ? (
                             <span
-                              className="text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md"
+                              className="shrink-0 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md"
                               style={{
                                 background: s.permission === "write" ? "#05966918" : "#2563eb18",
                                 color: s.permission === "write" ? "#059669" : "#2563eb",
@@ -456,28 +472,57 @@ export default function Files() {
                               {s.permission}
                             </span>
                           ) : (
-                            <span className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md bg-gray-200 text-gray-500">
+                            <span className="shrink-0 flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-md bg-gray-200 text-gray-500">
                               <Lock size={11} /> No access
                             </span>
                           )}
                         </div>
-                        <div className={`font-semibold text-sm truncate ${accessible ? "text-gray-900" : "text-gray-500"}`}>{s.name}</div>
-                        <div className="text-xs text-gray-400 mt-0.5">{M.label}</div>
-                        <div className={`mt-4 pt-3 border-t text-xs ${accessible ? "border-gray-100 text-gray-500" : "border-gray-200 text-gray-400"}`}>
-                          {s.usage ? (
-                            <span>
-                              <span className="font-semibold text-gray-700">{fmtSize(s.usage.total_size)}</span>
-                              <span className="text-gray-400"> · {s.usage.file_count} files</span>
-                            </span>
-                          ) : accessible ? (
-                            <span className="inline-flex items-center gap-1.5 text-blue-600 font-medium">
-                              <FolderOpen size={13} /> Open browser
-                            </span>
+
+                        <div className="text-xs text-gray-500 space-y-1 mb-4 break-all bg-gray-50 rounded-xl p-3">
+                          {s.type === "s3" ? (
+                            <>
+                              <div><span className="text-gray-400">bucket</span> · {s.config.bucket || "—"}</div>
+                              <div><span className="text-gray-400">endpoint</span> · {s.config.endpoint || "aws default"}</div>
+                            </>
+                          ) : s.type === "sftp" ? (
+                            <>
+                              <div><span className="text-gray-400">host</span> · {s.config.host || "—"}{s.config.port ? `:${s.config.port}` : ""}</div>
+                              <div><span className="text-gray-400">path</span> · {s.config.base_path ? `/${s.config.base_path}` : "/"}</div>
+                            </>
                           ) : (
-                            <span>Ask an admin for access</span>
+                            <>
+                              <div><span className="text-gray-400">host</span> · {s.config.host || "—"}</div>
+                              <div><span className="text-gray-400">share</span> · {s.config.share || "—"}</div>
+                            </>
                           )}
                         </div>
-                      </button>
+
+                        {accessible && (
+                          <div className="mb-4">
+                            <StorageMeter
+                              usage={s.usage}
+                              capacityGb={s.config.capacity_gb}
+                              onRefresh={() => calcUsage(s)}
+                              refreshing={calcId === s.id}
+                              testid={`picker-usage-${s.id}`}
+                            />
+                          </div>
+                        )}
+
+                        <button
+                          type="button"
+                          disabled={!accessible}
+                          onClick={() => accessible && setActive(s)}
+                          data-testid={`open-storage-${s.id}`}
+                          className={`mt-auto w-full flex items-center justify-center gap-2 text-sm font-semibold py-2.5 rounded-xl transition-colors ${
+                            accessible
+                              ? "bg-primary text-white hover:bg-blue-700 shadow-sm"
+                              : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          }`}
+                        >
+                          {accessible ? <><FolderOpen size={16} /> Open File Browser</> : <><Lock size={15} /> No access</>}
+                        </button>
+                      </div>
                     );
                   })}
                 </div>

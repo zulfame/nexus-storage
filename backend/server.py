@@ -127,6 +127,7 @@ def storage_public(doc: dict) -> dict:
         "domain": cfg.get("domain", ""),
         "base_path": cfg.get("base_path", ""),
         "access_key": cfg.get("access_key", ""),
+        "capacity_gb": cfg.get("capacity_gb"),
     }
     return {
         "id": str(doc["_id"]),
