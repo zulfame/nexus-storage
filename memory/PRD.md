@@ -115,6 +115,19 @@ config, README env-var table).
 - Login hero copy/chips updated to mention SFTP.
 - Verified: iteration 15 (frontend) 100%.
 
+## Implemented (2026-06, fork: P2 — cross-storage / usage / shares)
+- **Usage metrics**: `usage()` per backend (S3/Samba/SFTP) → total size + file/folder counts;
+  GET `/storages/{id}/usage?refresh=` (cached in doc). Storages cards show Calculate/Refresh;
+  Dashboard adds "Storage Used" + "Shared Links" stats (dashboard/stats: total_used_bytes, share_count).
+- **Cross-storage move/copy**: POST `/storages/{id}/files/transfer` {dest_storage_id,src,dst,is_dir,move}
+  streams file/folder (recursive) between two storages via server, 500MB/file cap. MoveCopyDialog
+  gains a destination-storage selector (same-storage → move endpoint; different → transfer).
+- **Shareable links**: `shares` collection; POST `/storages/{id}/files/share` {path,expires_days,password?};
+  GET `/shares`, DELETE `/shares/{id}`; PUBLIC GET `/share/{token}` + `/share/{token}/download?password=`.
+  Frontend: ShareDialog (expiry chips + optional password + copy link), public SharePage at
+  `/share/:token` (no auth; uses plain axios so wrong password never redirects to login).
+- Verified: iteration 16 (both) 100%, backend pytest suite tests/test_new_features.py (9 tests pass).
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).

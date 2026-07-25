@@ -124,6 +124,17 @@ Roles: **any** = any authenticated user, **admin** = admin only.
 | DELETE | `/api/storages/{id}/files?path=&is_dir=` | write | Delete file/folder |
 | POST | `/api/storages/{id}/files/folder` | write | Create folder `{path,name}` |
 | POST | `/api/storages/{id}/files/move` | write | Move/rename or copy `{src,dst,is_dir,copy}` |
+| POST | `/api/storages/{id}/files/transfer` | read src / write dst | Cross-storage move/copy `{dest_storage_id,src,dst,is_dir,move}` (streamed, 500MB/file cap) |
+| GET | `/api/storages/{id}/usage?refresh=` | read | Storage usage (total size, file/folder counts); cached, `refresh=1` recomputes |
+| POST | `/api/storages/{id}/files/share` | read | Create a public share link `{path,expires_days,password?}` |
+
+### Shares
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/shares` | any | List own shares (admins see all) |
+| DELETE | `/api/shares/{id}` | owner/admin | Revoke a share |
+| GET | `/api/share/{token}` | public | Share metadata (name, size, requires_password, expiry) |
+| GET | `/api/share/{token}/download?password=` | public | Download the shared file (validates expiry + password) |
 
 ### Logs / Settings / Misc
 | Method | Path | Role | Description |
