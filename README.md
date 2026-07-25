@@ -1,20 +1,35 @@
 # Nexus Storage Manager
 
 A multi-storage management system to manage files across **AWS S3**, **S3-compatible** (MinIO,
-Wasabi, etc.) and **Samba/SMB** shares from a single web UI, with JWT authentication and
-**per-storage user access control** (read-only / read-write).
+Wasabi, etc.), **Samba/SMB** shares, and **SFTP** servers from a single web UI, with JWT
+authentication and **per-storage user access control** (read-only / read-write).
 
 Built to the **Nexus Panel deployment contract**: FastAPI + MongoDB backend, React frontend,
 all configuration via environment variables.
 
 ## Features
 
-- JWT email/password authentication (admin seeded from env on startup).
-- Admin dashboard with storage & user statistics.
-- Add / edit / delete / test **S3** and **Samba** storage connections (credentials encrypted at rest).
+- JWT email/password authentication (admin seeded from env on startup); in-app change password.
+- Admin dashboard with storage & user statistics (S3 / Samba / SFTP breakdown, recent activity).
+- Add / edit / delete / **test** storage connections for **S3**, **Samba/SMB**, and **SFTP**
+  (credentials encrypted at rest; configurable ports; secrets revealable in the edit form for
+  verification via an eye toggle).
 - User management with **per-storage access grants** (read or write).
-- File browser: breadcrumb navigation, list, upload, download, delete, create folder.
-- Role-based UI: admins manage connections & users; users only see storages assigned to them.
+- **Google-Drive-style File Browser**:
+  - List **and** grid views (with real image thumbnails, lazy-loaded).
+  - Breadcrumb navigation with collapse (`…` menu) for deep paths.
+  - Per-folder search.
+  - Upload via an animated modal drop-zone with **per-file progress bars** + drag-and-drop; toast
+    notifications on success/failure.
+  - Download, delete, create folder.
+  - **Rename, Move to…, Copy to…** for files and folders (folder-picker dialog).
+  - **Right-click context menu** and a mobile-friendly kebab (⋮) menu.
+  - **File preview** for images, PDF, text/code, Word (`.docx`), Excel/CSV (`.xlsx`/`.csv`),
+    video and audio.
+- **Manage App**: dynamic branding (name, tagline, meta description, favicon, logo, primary color).
+- **Activity Logs**: server-side pagination, category filter, clear-by-date-range.
+- Role-based UI: admins manage connections, users & app settings; users only see storages
+  assigned to them.
 
 ## Repo Structure
 
@@ -30,6 +45,8 @@ frontend/   React app (all API calls use REACT_APP_BACKEND_URL + /api)
 - Every route is prefixed with `/api`.
 - Install deps: `pip install -r backend/requirements.txt` (Python 3.11).
 - Reads all config from environment variables (see table below). Nothing is hardcoded.
+- Storage backends: `boto3` (S3), `smbprotocol`/`smbclient` (Samba), `paramiko` (SFTP). Blocking
+  storage calls run in a threadpool; connection errors trigger an auto-reconnect retry wrapper.
 
 ## Frontend
 
@@ -63,8 +80,60 @@ default will block deploy.
 > Once you have logged in and created/managed users in the database, `ADMIN_EMAIL` and
 > `ADMIN_PASSWORD` are **no longer needed** — the backend will not re-seed when users already exist.
 
-Storage backend credentials (S3 keys, Samba passwords) are entered
+Storage backend credentials (S3 keys, Samba/SFTP passwords) are entered
 through the UI and stored **encrypted** in MongoDB — they are not environment variables.
+
+## API Reference
+
+All endpoints are prefixed with `/api`. Auth uses `Authorization: Bearer <token>`.
+Roles: **any** = any authenticated user, **admin** = admin only.
+
+### Auth
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/login` | public | Login with `{email,password}` → `{access_token, user}` |
+| GET | `/api/auth/me` | any | Current user profile |
+| POST | `/api/auth/change-password` | any | `{current_password,new_password}` |
+
+### Users (admin)
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/users` | admin | List users |
+| POST | `/api/users` | admin | Create user `{email,name,password,role}` |
+| PUT | `/api/users/{id}` | admin | Update user (name/role/password) |
+| DELETE | `/api/users/{id}` | admin | Delete user |
+| PUT | `/api/users/{id}/access` | admin | Set per-storage access `[{storage_id,permission}]` |
+
+### Storages
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/storages` | any | List storages (secrets never returned; users see only granted) |
+| POST | `/api/storages` | admin | Create storage `{name,type,config}` (type: s3/samba/sftp) |
+| PUT | `/api/storages/{id}` | admin | Update storage |
+| DELETE | `/api/storages/{id}` | admin | Delete storage |
+| GET | `/api/storages/{id}/config` | admin | Decrypted config (for edit form pre-fill) |
+| POST | `/api/storages/test` | admin | Test an unsaved connection `{type,config}` |
+| POST | `/api/storages/{id}/test` | admin | Test a saved connection |
+
+### Files
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/storages/{id}/files?path=` | read | List folder contents |
+| POST | `/api/storages/{id}/files/upload` | write | Multipart upload (`path`, `file`) |
+| GET | `/api/storages/{id}/files/download?path=` | read | Download a file (stream) |
+| DELETE | `/api/storages/{id}/files?path=&is_dir=` | write | Delete file/folder |
+| POST | `/api/storages/{id}/files/folder` | write | Create folder `{path,name}` |
+| POST | `/api/storages/{id}/files/move` | write | Move/rename or copy `{src,dst,is_dir,copy}` |
+
+### Logs / Settings / Misc
+| Method | Path | Role | Description |
+|--------|------|------|-------------|
+| GET | `/api/logs?page=&size=&category=` | admin | Paginated activity logs |
+| DELETE | `/api/logs?start=&end=` | admin | Clear logs by date range |
+| GET | `/api/settings` | public | App branding settings |
+| PUT | `/api/settings` | admin | Update app branding settings |
+| POST | `/api/errors` | any | Client-side error reporting |
+| GET | `/api/dashboard/stats` | admin | Dashboard counters |
 
 ## Deployment Checklist
 
@@ -73,3 +142,6 @@ through the UI and stored **encrypted** in MongoDB — they are not environment 
 3. Frontend uses `REACT_APP_BACKEND_URL` for all requests. ✅
 4. No URL / port / secret is hardcoded. ✅
 5. This README has a `## Environment Variables` section with the full 4-column table. ✅
+
+See [`ROADMAP.md`](./ROADMAP.md) for planned enhancements, potential improvements, and the
+proposed client-facing programmatic API (API keys + CRUD/manage endpoints).

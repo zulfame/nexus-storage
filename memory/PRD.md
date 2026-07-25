@@ -109,7 +109,16 @@ config, README env-var table).
 - Verified: iteration 14 (both) 100% frontend + backend curl-verified move/copy/rename on SFTP.
 
 ## Backlog / Next
-- P1: Storage config validation (required fields per type); 404 on unknown/malformed ids.
-- P1: Optional SFTP private-key auth (currently password only).
-- P2: dedicated STORAGE_ENCRYPTION_KEY env; log counts via single aggregation; native BSON date timestamps.
-- P2: File rename/move/copy across storages; multi-file upload with progress; storage usage metrics.
+See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
+client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).
+
+Highlights:
+- P1: multi-select + bulk file ops; storage config validation + 404 on bad ids; SFTP private-key
+  auth; **client-facing programmatic API** (API keys, `/api/v1` storage/file/user CRUD).
+- P2: cross-storage move/copy; storage usage metrics; dedicated STORAGE_ENCRYPTION_KEY; log
+  aggregation + BSON dates; folder/chunked uploads; shareable links; recursive search.
+
+## Documentation
+- `README.md`: features, env-var table, full `/api` reference, deployment checklist.
+- `ROADMAP.md`: potential improvements, prioritized enhancements, proposed client API.
+- `memory/PRD.md` (this file): dated implementation history + architecture.
