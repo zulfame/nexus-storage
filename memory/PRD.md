@@ -258,6 +258,13 @@ config, README env-var table).
   platform WAF (Cloudflare 1010) due to the key payload; the app itself handles it fine (verified locally).
 - testing_agent timed out twice (infra), so this batch was validated manually (curl + screenshots).
 
+## Bug fix (2026-06): cross-storage move/copy dropdown hidden
+- Cross-storage move/copy was already implemented (MoveCopyDialog "Destination storage" select +
+  `/api/storages/{id}/files/transfer`). Bug: the Radix `SelectContent` used `z-50` while the dialog
+  overlay is `z-[70]`, so the storage list rendered BEHIND the modal and appeared empty.
+- Fix: `SelectContent` in MoveCopyDialog now uses `z-[100]`. Verified: dropdown opens and lists both
+  storages; backend transfer STAGING→PRODUCTION (copy) works and source is preserved.
+
 ## Backlog / Next
 See `ROADMAP.md` for the full prioritized backlog, potential improvements, and the proposed
 client-facing programmatic API (API keys + versioned `/api/v1` CRUD/manage endpoints).

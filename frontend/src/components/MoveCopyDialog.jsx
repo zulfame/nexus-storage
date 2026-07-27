@@ -105,7 +105,7 @@ export function MoveCopyDialog({ sourceStorageId, storages = [], item, items, mo
                 <SelectValue />
               </div>
             </SelectTrigger>
-            <SelectContent className="rounded-xl">
+            <SelectContent className="rounded-xl z-[100]">
               {storages.map((s) => (
                 <SelectItem key={s.id} value={s.id} data-testid={`dest-storage-${s.name}`} className="rounded-lg cursor-pointer">
                   <span className="flex items-center gap-2">{typeIcon(s.type)} {s.name}{s.id === sourceStorageId ? " (current)" : ""}</span>
